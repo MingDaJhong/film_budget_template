@@ -199,6 +199,49 @@ textarea{resize:vertical;min-height:70px;font-size:13.5px}
 .foot{max-width:1400px;margin:0 auto;padding:0 20px 40px;color:var(--faint);font-size:12px;text-align:center}
 .foot a{color:var(--muted)}
 
+/* ---------- 合約設定 ---------- */
+.grp{font-size:11.5px;color:var(--accent);letter-spacing:.08em;margin:20px 0 11px;padding-bottom:6px;border-bottom:1px solid var(--line);font-weight:600}
+.grp:first-child{margin-top:0}
+.warnbox{margin-top:14px;padding:9px 11px;border:1px solid color-mix(in srgb,var(--red) 40%,transparent);background:color-mix(in srgb,var(--red) 8%,transparent);border-radius:9px;font-size:12px;color:var(--muted);line-height:1.6}
+.warnbox b{color:var(--red)}
+
+/* ---------- Modal / 合約文件 ---------- */
+.modal{position:fixed;inset:0;z-index:100;background:rgba(5,6,9,.74);backdrop-filter:blur(5px);overflow:auto;padding-bottom:60px}
+.modal[hidden]{display:none}
+body.modal-open{overflow:hidden}
+.modal-bar{position:sticky;top:0;z-index:2;display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line)}
+.modal-bar strong{margin-right:auto;font-size:14px}
+.doc{
+  max-width:830px;margin:24px auto;background:#fff;color:#111;
+  padding:48px 54px;border-radius:4px;box-shadow:0 14px 54px rgba(0,0,0,.5);
+  font-family:"Noto Serif TC","Songti TC","PingFang TC","Microsoft JhengHei",serif;
+  font-size:14px;line-height:1.95;
+}
+.doc h1{text-align:center;font-size:21px;letter-spacing:.28em;margin:0;color:#000}
+.doc .sub{text-align:center;color:#666;font-size:11.5px;letter-spacing:.12em;margin:6px 0 26px}
+.doc h3{font-size:14.5px;margin:22px 0 6px;color:#000;font-weight:700}
+.doc p{margin:0 0 6px;text-align:justify}
+.doc ol{margin:0 0 6px;padding-left:1.7em}
+.doc ol ol{margin:3px 0}
+.doc li{margin-bottom:3px}
+.doc table{width:100%;border-collapse:collapse;margin:10px 0 8px;font-size:13px;line-height:1.6}
+.doc th,.doc td{border:1px solid #8a8a8a;padding:6px 9px;text-align:left;vertical-align:top}
+.doc th{background:#eee;font-weight:700}
+.doc td.r,.doc th.r{text-align:right;white-space:nowrap}
+.doc .lead{margin-bottom:14px}
+.doc .fill{display:inline-block;min-width:110px;border-bottom:1px solid #777}
+.doc .signt{margin-top:30px}
+.doc .signt td{width:50%;padding:14px 16px;line-height:2.25;vertical-align:top}
+.doc .signt h4{margin:0 0 8px;font-size:14px}
+.doc .stamp{margin-top:22px;font-size:13px}
+.doc .warn{margin-top:28px;padding:10px 12px;border:1px dashed #c00;color:#c00;font-size:11.5px;line-height:1.65;border-radius:4px}
+@media(max-width:860px){
+  .doc{padding:26px 20px;margin:12px;font-size:13.5px;line-height:1.85}
+  .doc table{font-size:12px}
+  .doc .signt,.doc .signt tr,.doc .signt td{display:block;width:auto}
+  .doc .signt td + td{margin-top:14px}
+}
+
 /* ---------- Print ---------- */
 @media print{
   :root{--bg:#fff;--bg2:#fff;--panel:#fff;--panel2:#fff;--line:#ccc;--line2:#bbb;--text:#000;--muted:#444;--faint:#666;--accent:#000;--shadow:none}
@@ -210,6 +253,14 @@ textarea{resize:vertical;min-height:70px;font-size:13.5px}
   .side{position:static}
   .grand .val{font-size:20px}
   @page{margin:14mm}
+
+  /* 合約預覽開啟時，只印合約 */
+  body.modal-open .topbar,body.modal-open .wrap,body.modal-open .foot,body.modal-open .modal-bar{display:none!important}
+  body.modal-open .modal{position:static;background:#fff;padding:0;overflow:visible;backdrop-filter:none}
+  body.modal-open .doc{max-width:100%;margin:0;padding:0;box-shadow:none;border-radius:0;font-size:11.5pt;line-height:1.85;color:#000;background:#fff}
+  .doc h3{break-after:avoid}
+  .doc .signt,.doc table{break-inside:avoid}
+  .doc .warn{display:none!important}
 }
 </style>
 </head>
@@ -231,6 +282,7 @@ textarea{resize:vertical;min-height:70px;font-size:13.5px}
       <button class="btn sm" id="btnExport">⬇ JSON</button>
       <button class="btn sm" id="btnImport">⬆ 匯入</button>
       <button class="btn sm danger" id="btnReset">↺ 重設</button>
+      <button class="btn sm" id="btnContract">📄 合約書</button>
       <button class="btn sm primary" id="btnPrint">🖨 列印 / PDF</button>
     </div>
   </div>
@@ -275,6 +327,86 @@ textarea{resize:vertical;min-height:70px;font-size:13.5px}
       <div class="card-head"><h2><span class="ico">📝</span>報價備註</h2></div>
       <div class="card-body">
         <textarea id="m_note" placeholder="例：本報價含 2 次修改，超出另計；拍攝日程需於確認後 7 日內排定；未含演員肖像授權費用。"></textarea>
+      </div>
+    </section>
+
+    <section class="card no-print" id="contractCard">
+      <div class="card-head">
+        <h2 style="flex:1"><span class="ico">📄</span>合約書</h2>
+        <button class="btn sm primary" id="btnGenContract">產生合約書 →</button>
+      </div>
+      <div class="card-body">
+        <p class="note" style="margin-top:0">填好下列欄位後按「產生合約書」，會自動帶入上方的<b>總價、服務明細與修改次數</b>，可直接列印、存 PDF 或下載 Word 檔繼續編輯。</p>
+
+        <h3 class="grp">甲方（委製方／客戶）</h3>
+        <div class="meta-grid">
+          <div class="field"><label>公司／個人名稱</label><input type="text" id="c_aName" placeholder="○○股份有限公司"></div>
+          <div class="field"><label>統一編號</label><input type="text" id="c_aTax" placeholder="12345678"></div>
+          <div class="field"><label>代表人</label><input type="text" id="c_aRep" placeholder="王大明"></div>
+          <div class="field"><label>地址</label><input type="text" id="c_aAddr" placeholder="台北市…"></div>
+          <div class="field"><label>聯絡人</label><input type="text" id="c_aContact"></div>
+          <div class="field"><label>電話</label><input type="text" id="c_aPhone"></div>
+          <div class="field"><label>Email</label><input type="text" id="c_aEmail"></div>
+        </div>
+
+        <h3 class="grp">乙方（承製方／製作方，也就是你）</h3>
+        <div class="meta-grid">
+          <div class="field"><label>公司／個人名稱</label><input type="text" id="c_bName" placeholder="○○影像工作室"></div>
+          <div class="field"><label>統一編號</label><input type="text" id="c_bTax"></div>
+          <div class="field"><label>代表人</label><input type="text" id="c_bRep"></div>
+          <div class="field"><label>地址</label><input type="text" id="c_bAddr"></div>
+          <div class="field"><label>聯絡人</label><input type="text" id="c_bContact"></div>
+          <div class="field"><label>電話</label><input type="text" id="c_bPhone"></div>
+          <div class="field"><label>Email</label><input type="text" id="c_bEmail"></div>
+        </div>
+
+        <h3 class="grp">標的、交付與期程</h3>
+        <div class="meta-grid">
+          <div class="field"><label>合約編號</label><input type="text" id="c_no" placeholder="留白則不顯示"></div>
+          <div class="field"><label>簽約日期</label><input type="date" id="c_signDate"></div>
+          <div class="field"><label>拍攝日</label><input type="date" id="c_shootDate"></div>
+          <div class="field"><label>初剪交付日</label><input type="date" id="c_cutDate"></div>
+          <div class="field"><label>完成交付日</label><input type="date" id="c_finalDate"></div>
+          <div class="field"><label>驗收／回覆天數</label><input type="number" id="c_acceptDays" min="0" step="1"><span class="hint">逾期視為驗收通過</span></div>
+        </div>
+        <div class="meta-grid" style="margin-top:12px">
+          <div class="field" style="grid-column:1/-1"><label>影片規格</label><input type="text" id="c_spec" placeholder="1920×1080 / MP4 (H.264) / 16:9 / 25fps"></div>
+          <div class="field" style="grid-column:1/-1"><label>交付項目</label><input type="text" id="c_deliver" placeholder="完成影片母檔 1 支、社群直式版本 1 支、專案素材備份"></div>
+        </div>
+
+        <h3 class="grp">付款方式</h3>
+        <div class="meta-grid">
+          <div class="field"><label>簽約訂金 %</label><input type="number" id="c_pay1" min="0" max="100" step="5"></div>
+          <div class="field"><label>期中款 %</label><input type="number" id="c_pay2" min="0" max="100" step="5"><span class="hint">填 0 就是兩期付款</span></div>
+          <div class="field"><label>交付尾款 %</label><input type="number" id="c_pay3" min="0" max="100" step="5"></div>
+          <div class="field"><label>請款後付款期限（日）</label><input type="number" id="c_payDays" min="0" step="1"></div>
+        </div>
+        <p class="note" id="payHint"></p>
+
+        <h3 class="grp">條款設定</h3>
+        <div class="meta-grid">
+          <div class="field"><label>著作權歸屬</label>
+            <select id="c_copyright">
+              <option value="a">付清後著作財產權全部讓與甲方</option>
+              <option value="b">乙方保留著作權，授權甲方永久使用</option>
+              <option value="c">雙方共有</option>
+            </select></div>
+          <div class="field"><label>逾期違約金（每日 %）</label><input type="number" id="c_penalty" min="0" step="0.1"></div>
+          <div class="field"><label>違約金上限（總價 %）</label><input type="number" id="c_penaltyCap" min="0" step="1"></div>
+          <div class="field"><label>管轄法院</label><input type="text" id="c_court" placeholder="臺灣臺北地方法院"></div>
+        </div>
+        <div class="adj" style="margin-top:12px">
+          <div class="adj-row"><label><input type="checkbox" id="c_showcase">乙方得將成品用於作品集／獎項報名等自我宣傳</label></div>
+          <div class="adj-row"><label><input type="checkbox" id="c_confidential">加入保密條款</label></div>
+          <div class="adj-row"><label><input type="checkbox" id="c_showPrice">合約內服務明細顯示各項金額</label></div>
+        </div>
+
+        <h3 class="grp">其他約定事項</h3>
+        <textarea id="c_extra" placeholder="每行一項，會自動編號。例：&#10;本片配樂由乙方採購授權，授權範圍為網路播放五年。&#10;拍攝當日如遇雨天，雙方另議延期日期，甲方不另計費。"></textarea>
+
+        <div class="warnbox">
+          <b>提醒：</b>本功能產出的是<b>合約草稿範本</b>，用來省下打字時間，不構成法律意見。實際簽署前請依專案狀況調整，重要或高金額案件建議請律師審閱。
+        </div>
       </div>
     </section>
   </main>
@@ -339,6 +471,17 @@ textarea{resize:vertical;min-height:70px;font-size:13.5px}
 
 <input type="file" id="fileIn" accept="application/json,.json" style="display:none">
 
+<div class="modal" id="contractModal" hidden>
+  <div class="modal-bar">
+    <strong>📄 合約書預覽</strong>
+    <button class="btn sm" id="cCopy">📋 複製全文</button>
+    <button class="btn sm" id="cWord">⬇ Word (.doc)</button>
+    <button class="btn sm primary" id="cPrint">🖨 列印 / PDF</button>
+    <button class="btn sm ghost" id="cClose">✕ 關閉</button>
+  </div>
+  <div class="doc" id="contractDoc"></div>
+</div>
+
 <script>
 (function(){
 "use strict";
@@ -374,6 +517,17 @@ function defaults(){
     meta:{ project:"", client:"", date:new Date().toISOString().slice(0,10),
            cur:"NT$", days:1, hours:8, min:3, note:"" },
     adj:{ conOn:true, con:10, profOn:false, prof:15, taxOn:true, tax:5, disc:0 },
+    contract:{
+      no:"", signDate:"",
+      aName:"", aTax:"", aRep:"", aAddr:"", aContact:"", aPhone:"", aEmail:"",
+      bName:"", bTax:"", bRep:"", bAddr:"", bContact:"", bPhone:"", bEmail:"",
+      spec:"1920×1080 / MP4 (H.264) / 16:9 / 30fps",
+      deliver:"完成影片母檔 1 支",
+      shootDate:"", cutDate:"", finalDate:"", acceptDays:7,
+      pay1:30, pay2:0, pay3:70, payDays:7,
+      copyright:"a", showcase:true, confidential:true, showPrice:true,
+      penalty:0.3, penaltyCap:20, court:"臺灣臺北地方法院", extra:""
+    },
     secs:[
       {id:"equip", kind:"items", icon:"🎥", name:"器材成本", on:true, open:true, fixed:true, sync:true, items:[
         item("攝影機機身（A cam）","day",8000,1,1),
@@ -423,13 +577,22 @@ const TEMPLATES = [
    ========================================================= */
 let S = load() || defaults();
 
+/* 舊版存檔沒有新欄位時補齊，避免讀回後出錯 */
+function migrate(d){
+  const base = defaults();
+  d.meta     = Object.assign(base.meta, d.meta || {});
+  d.adj      = Object.assign(base.adj, d.adj || {});
+  d.contract = Object.assign(base.contract, d.contract || {});
+  return d;
+}
+
 function load(){
   try{
     const raw = localStorage.getItem(KEY);
     if(!raw) return null;
     const d = JSON.parse(raw);
     if(!d || !d.secs) return null;
-    return d;
+    return migrate(d);
   }catch(e){ return null; }
 }
 let saveTimer = null;
@@ -634,6 +797,7 @@ function renderSummary(){
   $("#k_day").textContent   = num(S.meta.days) > 0 ? money(c.total / num(S.meta.days)) : "—";
   $("#k_shoot").textContent = money(c.shoot);
   $("#k_post").textContent  = money(c.post + c.rev);
+  updatePayHint();
 }
 
 /* 只更新數字，不重繪 DOM（避免輸入時失焦） */
@@ -679,6 +843,10 @@ function fillForm(){
     const el = $("#"+id), k = ADJF[id];
     if(el.type === "checkbox") el.checked = !!S.adj[k]; else el.value = S.adj[k];
   });
+  Object.keys(S.contract).forEach(k => {
+    const el = $("#c_"+k); if(!el) return;
+    if(el.type === "checkbox") el.checked = !!S.contract[k]; else el.value = S.contract[k];
+  });
 }
 
 /* =========================================================
@@ -698,6 +866,15 @@ function bindForms(){
     el.addEventListener("input", e => {
       S.adj[ADJF[id]] = el.type === "checkbox" ? el.checked : num(el.value);
       renderSummary(); save();
+    });
+  });
+  Object.keys(S.contract).forEach(k => {
+    const el = $("#c_"+k); if(!el) return;
+    el.addEventListener("input", ()=>{
+      S.contract[k] = el.type === "checkbox" ? el.checked
+                    : el.type === "number"   ? num(el.value)
+                    : el.value;
+      updatePayHint(); save();
     });
   });
 }
@@ -807,6 +984,332 @@ function addSection(name, icon, items){
 }
 
 /* =========================================================
+   合約書
+   ========================================================= */
+const CURNAME = {"NT$":"新臺幣","US$":"美元","¥":"日圓","€":"歐元","RMB¥":"人民幣","HK$":"港幣"};
+
+/* 新臺幣 49,781 元整 */
+function tw(n){
+  return (CURNAME[S.meta.cur] || S.meta.cur) + " " + nf.format(Math.round(n||0)) + " 元整";
+}
+/* 中文大寫金額（僅台幣時附註） */
+function cnAmount(n){
+  n = Math.round(n || 0);
+  if(n <= 0) return "零元整";
+  const D = "零壹貳參肆伍陸柒捌玖".split(""), U = ["","拾","佰","仟"], G = ["","萬","億","兆"];
+  const groups = []; let s = String(n);
+  while(s.length){ groups.push(s.slice(-4)); s = s.slice(0,-4); }
+  const parts = [];
+  for(let i = groups.length - 1; i >= 0; i--){
+    const grp = groups[i]; let t = "", zero = false;
+    for(let j = 0; j < grp.length; j++){
+      const d = +grp[j], pos = grp.length - 1 - j;
+      if(d === 0){ zero = true; continue; }
+      if(zero && t) t += "零";
+      zero = false; t += D[d] + U[pos];
+    }
+    if(t){ if(parts.length && +grp < 1000) t = "零" + t; parts.push(t + G[i]); }
+  }
+  return parts.join("") + "元整";
+}
+function amtFull(n){
+  return tw(n) + (S.meta.cur === "NT$" ? `（${cnAmount(n)}）` : "");
+}
+const BLANK = '<span class="fill">&nbsp;</span>';
+function val(v, unit){ v = (v==null?"":String(v)).trim(); return v ? esc(v) + (unit||"") : BLANK; }
+function dstr(iso){
+  if(!iso) return BLANK;
+  const p = String(iso).split("-"); if(p.length !== 3) return esc(iso);
+  return `${p[0]} 年 ${+p[1]} 月 ${+p[2]} 日`;
+}
+function rocDate(iso){
+  if(!iso) return `中華民國 <span class="fill">&nbsp;</span> 年 <span class="fill">&nbsp;</span> 月 <span class="fill">&nbsp;</span> 日`;
+  const p = String(iso).split("-");
+  return `中華民國 ${(+p[0]) - 1911} 年 ${+p[1]} 月 ${+p[2]} 日`;
+}
+function partyCell(pre){
+  const c = S.contract;
+  return `名稱：${val(c[pre+"Name"])}<br>
+    統一編號：${val(c[pre+"Tax"])}　代表人：${val(c[pre+"Rep"])}<br>
+    地址：${val(c[pre+"Addr"])}<br>
+    聯絡人：${val(c[pre+"Contact"])}　電話：${val(c[pre+"Phone"])}<br>
+    Email：${val(c[pre+"Email"])}`;
+}
+
+/* 付款分期：總和為 100% 時由尾款吸收四捨五入尾差 */
+function payPlan(total){
+  const c = S.contract, p = [num(c.pay1), num(c.pay2), num(c.pay3)];
+  const sum = p[0] + p[1] + p[2];
+  const a = [Math.round(total*p[0]/100), Math.round(total*p[1]/100), 0];
+  a[2] = (Math.abs(sum - 100) < 0.001) ? total - a[0] - a[1] : Math.round(total*p[2]/100);
+  return { pct:p, sum, amt:a };
+}
+
+function serviceTable(){
+  const c = compute(), show = S.contract.showPrice;
+  let i = 0;
+  const rows = S.secs.filter(s => s.on && (c.per[s.id] > 0 || s.kind === "revision")).map(s => {
+    i++;
+    let detail;
+    if(s.kind === "revision"){
+      detail = `含 ${num(s.rev.free)} 次修改，超出部分依第五條辦理`;
+    }else{
+      const names = (s.items||[]).filter(x => x.on && String(x.name).trim())
+                                 .map(x => String(x.name).trim());
+      detail = names.join("、") || "—";
+    }
+    return `<tr><td style="width:3.2em;text-align:center">${i}</td>
+      <td style="width:9.5em">${esc(s.name)}</td>
+      <td>${esc(detail)}</td>
+      ${show ? `<td class="r">${money(c.per[s.id])}</td>` : ""}</tr>`;
+  }).join("");
+  const foot = show ? `<tr><th colspan="3" class="r">契約總價</th><th class="r">${money(c.total)}</th></tr>` : "";
+  return `<table>
+    <tr><th style="text-align:center">項次</th><th>服務項目</th><th>內容</th>${show?'<th class="r">金額</th>':""}</tr>
+    ${rows || `<tr><td colspan="${show?4:3}">—</td></tr>`}
+    ${foot}
+  </table>`;
+}
+
+const COPYRIGHT_TEXT = {
+  a: "本影片之著作財產權，於甲方付清契約總價後，由乙方全部讓與甲方；乙方保有著作人格權。讓與前，乙方仍為著作財產權人。",
+  b: "本影片之著作財產權由乙方保有。甲方付清契約總價後，乙方授權甲方於全球範圍內、不限次數、永久且不可撤回地使用本影片於約定用途；該授權為非專屬授權。",
+  c: "本影片之著作財產權由甲乙雙方共有，應有部分各二分之一。任一方對外授權、讓與或設質，應事先取得他方書面同意。"
+};
+
+function contractHTML(){
+  const c = S.contract, m = S.meta, r = compute();
+  const revSec = S.secs.find(s => s.kind === "revision");
+  const revOn  = revSec && revSec.on;
+  const free   = revOn ? num(revSec.rev.free) : 0;
+  const perTxt = revOn
+    ? (revSec.rev.mode === "pct"
+        ? `後期製作費用之 ${num(revSec.rev.pct)}%`
+        : amtFull(num(revSec.rev.amount)))
+    : "雙方另行議定之金額";
+
+  const plan = payPlan(r.total);
+  const taxNote = S.adj.taxOn
+    ? `（含營業稅 ${num(S.adj.tax)}%）`
+    : "（未含營業稅；如需開立統一發票，應另加計營業稅）";
+
+  const payItems = [];
+  payItems.push(`<li><b>簽約訂金</b>：契約總價之 ${num(c.pay1)}%，計 ${amtFull(plan.amt[0])}，於本契約簽訂後 ${num(c.payDays)} 日內給付。</li>`);
+  if(num(c.pay2) > 0)
+    payItems.push(`<li><b>期中款</b>：契約總價之 ${num(c.pay2)}%，計 ${amtFull(plan.amt[1])}，於乙方交付初剪版本後 ${num(c.payDays)} 日內給付。</li>`);
+  payItems.push(`<li><b>交付尾款</b>：契約總價之 ${num(c.pay3)}%，計 ${amtFull(plan.amt[2])}，於甲方完成驗收後 ${num(c.payDays)} 日內給付。</li>`);
+
+  const extras = String(c.extra||"").split("\n").map(s=>s.trim()).filter(Boolean);
+  const accept = num(c.acceptDays);
+
+  let n = 0; const N = () => ["一","二","三","四","五","六","七","八","九","十","十一","十二","十三","十四","十五","十六"][n++];
+
+  return `
+  <h1>影片製作委製契約書</h1>
+  <div class="sub">FILM PRODUCTION AGREEMENT${c.no ? "　・　合約編號：" + esc(c.no) : ""}</div>
+
+  <p class="lead">立契約書人：</p>
+  <table>
+    <tr><th style="width:5.5em">甲方<br>（委製方）</th><td>${partyCell("a")}</td></tr>
+    <tr><th>乙方<br>（承製方）</th><td>${partyCell("b")}</td></tr>
+  </table>
+  <p class="lead">茲就影片製作事宜，雙方本於平等互惠原則，同意訂立本契約，共同遵守下列各條款：</p>
+
+  <h3>第${N()}條　契約標的</h3>
+  <ol>
+    <li>專案名稱：${val(m.project)}</li>
+    <li>影片規格：${val(c.spec)}</li>
+    <li>成品長度：約 ${num(m.min)} 分鐘</li>
+    <li>預計拍攝天數：${num(m.days)} 天，實際日期依第三條期程辦理。</li>
+  </ol>
+
+  <h3>第${N()}條　服務範圍及交付項目</h3>
+  <ol>
+    <li>乙方應提供之服務內容如下表所列。表列以外之項目不屬本契約範圍，如有需要應經雙方書面同意後另行議價。
+      ${serviceTable()}
+    </li>
+    <li>交付項目：${val(c.deliver)}。</li>
+    <li>乙方應以雲端連結或實體儲存媒體交付成品數位檔案；除另有約定外，乙方無提供專案原始工程檔（如剪輯專案檔）之義務。</li>
+  </ol>
+
+  <h3>第${N()}條　製作期程</h3>
+  <ol>
+    <li>拍攝日：${dstr(c.shootDate)}</li>
+    <li>初剪交付日：${dstr(c.cutDate)}</li>
+    <li>完成交付日：${dstr(c.finalDate)}</li>
+    <li>因甲方未依期限提供素材、資訊、審核意見、場地或人員，致製作進度延誤者，前述各期日應按延誤日數順延，乙方不負遲延責任。</li>
+  </ol>
+
+  <h3>第${N()}條　契約總價及付款方式</h3>
+  <ol>
+    <li>本契約總價為 ${amtFull(r.total)}${taxNote}。</li>
+    <li>甲方應依下列期程給付價金：<ol style="list-style:decimal">${payItems.join("")}</ol></li>
+    <li>各期款項由乙方開立統一發票或收據後請款，甲方應依前項期限匯付至乙方指定帳戶，匯款手續費由甲方負擔。</li>
+    <li>下列費用未包含於契約總價，經雙方書面同意後由甲方另行負擔：演員肖像及聲音授權費、音樂及圖庫素材授權費、場地額外使用費、甲方要求之加班或加場費用，以及其他因甲方新增需求所生之費用。</li>
+  </ol>
+
+  <h3>第${N()}條　修改次數及費用</h3>
+  <ol>
+    <li>本契約總價已包含 ${free} 次修改。所稱一次修改，指甲方就同一版本彙整意見後一次性提出之修改需求。</li>
+    <li>超出前項次數者，每次加收 ${perTxt}。</li>
+    <li>下列情形不屬修改範圍，應另行報價：重新拍攝、變更影片結構或腳本方向、更換主要素材或主要演員、變更影片長度規格。</li>
+    <li>影片經甲方確認完成或已對外公開發布後，如需再行調整，視為新增需求，應另行議價。</li>
+  </ol>
+
+  <h3>第${N()}條　甲方之協力義務</h3>
+  <ol>
+    <li>甲方應於乙方指定期限內提供製作所需之品牌識別、產品、文案、圖片、字型及其他素材，並擔保對前述素材擁有合法權利；因該等素材侵害第三人權利所生之損害及糾紛，由甲方負責處理並負擔全部責任。</li>
+    <li>甲方應指定單一聯絡窗口，統一彙整並提出審核意見。</li>
+    <li>甲方未於 ${accept} 日內回覆審核意見者，視為對該版本無意見。</li>
+  </ol>
+
+  <h3>第${N()}條　驗收</h3>
+  <ol>
+    <li>乙方交付成品後，甲方應於 ${accept} 日內完成驗收，並以書面或電子郵件、通訊軟體等可留存之方式通知驗收結果。</li>
+    <li>甲方逾期未通知驗收結果，或已將成品對外公開使用者，視為驗收通過。</li>
+  </ol>
+
+  <h3>第${N()}條　著作權及使用授權</h3>
+  <ol>
+    <li>${COPYRIGHT_TEXT[c.copyright] || COPYRIGHT_TEXT.a}</li>
+    ${c.showcase ? `<li>乙方得將本影片及其製作過程之影像、幕後花絮，用於作品集、官方網站、社群媒體、獎項報名及業務提案等自我宣傳用途，無須另行支付費用。甲方如有保密需求，應於本契約簽訂時以書面提出。</li>` : ""}
+    <li>本影片使用之第三方素材（音樂、圖庫、字型、特效素材等），其使用範圍以乙方所取得之授權條款為限；甲方逾越授權範圍使用所生之責任，由甲方自負。</li>
+  </ol>
+
+  ${c.confidential ? `<h3>第${N()}條　保密義務</h3>
+  <p>雙方對於因履行本契約所知悉他方之營業秘密、未公開資訊、客戶資料及本契約內容，非經他方書面同意，不得洩漏予第三人或作契約目的外之使用。本條義務於本契約終止或解除後仍繼續有效。</p>` : ""}
+
+  <h3>第${N()}條　不可抗力</h3>
+  <p>因天災、疫情、政府管制、戰亂、罷工或其他不可歸責於雙方之事由，致無法履行或無法如期履行本契約者，雙方得協議延期或終止本契約，互不負損害賠償責任；乙方已完成部分之工作及已支出之必要費用，由甲方按比例給付。</p>
+
+  <h3>第${N()}條　契約變更及終止</h3>
+  <ol>
+    <li>本契約之變更、增補，應經雙方書面同意始生效力。</li>
+    <li>甲方於拍攝日前終止本契約者，已支付之簽約訂金不予退還；乙方已代為支出之器材、場地、人員等費用及已產生之違約金，由甲方負擔。</li>
+    <li>拍攝完成後甲方終止本契約者，甲方應給付乙方已完成部分之工作報酬及已支出之必要費用。</li>
+  </ol>
+
+  <h3>第${N()}條　違約責任</h3>
+  <ol>
+    <li>乙方逾期交付且不可歸責於甲方者，每逾一日應按契約總價 ${num(c.penalty)}% 計付違約金，累計以契約總價 ${num(c.penaltyCap)}% 為上限。</li>
+    <li>甲方逾期給付價金者，準用前項規定計付違約金。乙方並得於價金付清前，暫停後續製作或暫緩交付成品。</li>
+  </ol>
+
+  <h3>第${N()}條　其他約定事項</h3>
+  ${extras.length ? `<ol>${extras.map(x=>`<li>${esc(x)}</li>`).join("")}</ol>` : "<p>無。</p>"}
+
+  <h3>第${N()}條　準據法及管轄法院</h3>
+  <p>本契約以中華民國法律為準據法。因本契約所生之爭議，雙方應本誠信原則協商解決；協商不成時，雙方合意以${val(c.court)}為第一審管轄法院。</p>
+
+  <h3>第${N()}條　契約份數</h3>
+  <p>本契約一式二份，由甲乙雙方各執一份為憑。未盡事宜，依中華民國相關法令及一般商業慣例辦理。</p>
+
+  <table class="signt"><tr>
+    <td><h4>甲方（委製方）</h4>
+      公司名稱：${val(c.aName)}<br>
+      統一編號：${val(c.aTax)}<br>
+      代表人：${val(c.aRep)}　（簽章）<br>
+      地址：${val(c.aAddr)}</td>
+    <td><h4>乙方（承製方）</h4>
+      公司名稱：${val(c.bName)}<br>
+      統一編號：${val(c.bTax)}<br>
+      代表人：${val(c.bRep)}　（簽章）<br>
+      地址：${val(c.bAddr)}</td>
+  </tr></table>
+
+  <p class="stamp">中華民國　${c.signDate ? rocDate(c.signDate).replace("中華民國 ","") : `<span class="fill">&nbsp;</span> 年 <span class="fill">&nbsp;</span> 月 <span class="fill">&nbsp;</span> 日`}</p>
+
+  <div class="warn">⚠️ 本文件由「影片拍攝成本試算表」依你填寫的資料自動產生，屬<b>合約草稿範本</b>，不構成法律意見。請依實際專案狀況調整條款；重要或高金額案件，建議簽署前交由律師審閱。（此提示不會被列印或匯出）</div>`;
+}
+
+function openContract(){
+  $("#contractDoc").innerHTML = contractHTML();
+  $("#contractModal").hidden = false;
+  document.body.classList.add("modal-open");
+  $("#contractModal").scrollTop = 0;
+}
+function closeContract(){
+  $("#contractModal").hidden = true;
+  document.body.classList.remove("modal-open");
+}
+function docExportHTML(){
+  const clone = $("#contractDoc").cloneNode(true);
+  const w = clone.querySelector(".warn"); if(w) w.remove();
+  return clone.innerHTML;
+}
+function contractFileName(ext){
+  const p = (S.meta.project || "影片製作契約").replace(/[\\/:*?"<>|]/g,"_");
+  return `${p}-合約書-${S.meta.date}.${ext}`;
+}
+
+$("#btnContract").addEventListener("click", openContract);
+$("#btnGenContract").addEventListener("click", openContract);
+$("#cClose").addEventListener("click", closeContract);
+$("#cPrint").addEventListener("click", ()=> window.print());
+$("#contractModal").addEventListener("click", e => { if(e.target.id === "contractModal") closeContract(); });
+document.addEventListener("keydown", e => {
+  if(e.key === "Escape" && !$("#contractModal").hidden) closeContract();
+});
+
+$("#cWord").addEventListener("click", ()=>{
+  const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="utf-8"><title>${esc(S.meta.project || "影片製作委製契約書")}</title>
+<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]-->
+<style>
+@page{size:A4;margin:2.5cm}
+body{font-family:"標楷體","Noto Serif TC",serif;font-size:12pt;line-height:1.9;color:#000}
+h1{text-align:center;font-size:17pt;letter-spacing:.2em;margin:0}
+.sub{text-align:center;font-size:9pt;color:#666;margin:4pt 0 18pt}
+h3{font-size:12.5pt;margin:16pt 0 4pt}
+h4{font-size:12pt;margin:0 0 6pt}
+p{margin:0 0 5pt;text-align:justify}
+ol{margin:0 0 5pt;padding-left:22pt}
+li{margin-bottom:2pt}
+table{border-collapse:collapse;width:100%;font-size:11pt;margin:8pt 0}
+th,td{border:1px solid #888;padding:5pt 7pt;text-align:left;vertical-align:top}
+th{background:#eeeeee}
+.r{text-align:right}
+.signt{margin-top:24pt}
+.signt td{line-height:2.2}
+.fill{border-bottom:1px solid #777;display:inline-block;min-width:80pt}
+.stamp{margin-top:18pt}
+</style></head><body>${docExportHTML()}</body></html>`;
+  dl("﻿" + html, contractFileName("doc"), "application/msword");
+});
+
+$("#cCopy").addEventListener("click", async ()=>{
+  const clone = $("#contractDoc").cloneNode(true);
+  const w = clone.querySelector(".warn"); if(w) w.remove();
+  const text = clone.innerText.replace(/\n{3,}/g,"\n\n").trim();
+  const btn = $("#cCopy"), old = btn.textContent;
+  try{
+    await navigator.clipboard.writeText(text);
+    btn.textContent = "✓ 已複製";
+  }catch(err){
+    const ta = document.createElement("textarea");
+    ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    btn.textContent = document.execCommand("copy") ? "✓ 已複製" : "複製失敗";
+    ta.remove();
+  }
+  setTimeout(()=>{ btn.textContent = old; }, 1600);
+});
+
+function updatePayHint(){
+  const c = S.contract, sum = num(c.pay1) + num(c.pay2) + num(c.pay3);
+  const r = compute(), plan = payPlan(r.total);
+  const el = $("#payHint");
+  const parts = [`訂金 ${money(plan.amt[0])}`];
+  if(num(c.pay2) > 0) parts.push(`期中 ${money(plan.amt[1])}`);
+  parts.push(`尾款 ${money(plan.amt[2])}`);
+  if(Math.abs(sum - 100) < 0.001){
+    el.innerHTML = `依目前總價 <b style="color:var(--accent)">${money(r.total)}</b>　→　${parts.join("　/　")}`;
+  }else{
+    el.innerHTML = `<span style="color:var(--red)">⚠ 三期比例合計為 ${sum}%，並非 100%。</span>　依目前設定：${parts.join("　/　")}`;
+  }
+}
+
+/* =========================================================
    工具列
    ========================================================= */
 $("#btnTheme").addEventListener("click", ()=>{
@@ -876,7 +1379,7 @@ $("#fileIn").addEventListener("change", e => {
     try{
       const d = JSON.parse(r.result);
       if(!d.secs || !d.meta) throw 0;
-      S = d; fillForm(); renderAll(); save();
+      S = migrate(d); fillForm(); renderAll(); save();
     }catch(err){ alert("讀取失敗：這不是本工具匯出的 JSON 檔。"); }
   };
   r.readAsText(f);
