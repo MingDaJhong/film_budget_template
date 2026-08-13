@@ -1252,9 +1252,13 @@ document.addEventListener("keydown", e => {
 });
 
 $("#cWord").addEventListener("click", ()=>{
+  /* Word 條件註解必須用拼接產生：script 內若出現字面的 HTML 註解起始符號，
+     解析器會進入 escaped 狀態而提早結束 script，整段 JS 會變成純文字 */
+  const MSO = "<!" + "--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View>"
+            + "<w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]--" + ">";
   const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
 <head><meta charset="utf-8"><title>${esc(S.meta.project || "影片製作委製契約書")}</title>
-<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]-->
+${MSO}
 <style>
 @page{size:A4;margin:2.5cm}
 body{font-family:"標楷體","Noto Serif TC",serif;font-size:12pt;line-height:1.9;color:#000}
