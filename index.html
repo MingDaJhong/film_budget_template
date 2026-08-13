@@ -1252,14 +1252,15 @@ document.addEventListener("keydown", e => {
 });
 
 $("#cWord").addEventListener("click", ()=>{
-  /* Word 條件註解必須用拼接產生：script 內若出現字面的 HTML 註解起始符號，
-     解析器會進入 escaped 狀態而提早結束 script，整段 JS 會變成純文字 */
-  const MSO = "<!" + "--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View>"
-            + "<w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]--" + ">";
-  const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
-<head><meta charset="utf-8"><title>${esc(S.meta.project || "影片製作委製契約書")}</title>
-${MSO}
-<style>
+  /* 這段 Word 包裝的標籤一律用 C() 拼接產生，原始碼裡刻意不留字面的 body / head
+     結束標籤與 HTML 註解符號。理由：Live Server 這類開發伺服器會掃描檔案，把熱重載
+     用的 script 插在「第一個 body 結束標籤」之前。若那個標籤字面出現在這裡，注入碼
+     自帶的 script 結束標籤就會把整個 script 攔腰截斷，後面的程式碼會全部變成畫面上
+     的純文字，整頁失效。修改這裡時請維持拼接寫法。 */
+  const C = t => "<" + "/" + t + ">";
+  const MSO = "<!" + "--[if gte mso 9]><xml><w:WordDocument><w:View>Print" + C("w:View")
+            + "<w:Zoom>100" + C("w:Zoom") + C("w:WordDocument") + C("xml") + "<![endif]--" + ">";
+  const css = `
 @page{size:A4;margin:2.5cm}
 body{font-family:"標楷體","Noto Serif TC",serif;font-size:12pt;line-height:1.9;color:#000}
 h1{text-align:center;font-size:17pt;letter-spacing:.2em;margin:0}
@@ -1276,8 +1277,16 @@ th{background:#eeeeee}
 .signt{margin-top:24pt}
 .signt td{line-height:2.2}
 .fill{border-bottom:1px solid #777;display:inline-block;min-width:80pt}
-.stamp{margin-top:18pt}
-</style></head><body>${docExportHTML()}</body></html>`;
+.stamp{margin-top:18pt}`;
+  const html =
+      '<html xmlns:o="urn:schemas-microsoft-com:office:office"'
+    + ' xmlns:w="urn:schemas-microsoft-com:office:word"'
+    + ' xmlns="http://www.w3.org/TR/REC-html40">'
+    + '<head><meta charset="utf-8"><title>'
+    + esc(S.meta.project || "影片製作委製契約書") + C("title")
+    + MSO
+    + "<style>" + css + C("style") + C("head")
+    + "<body>" + docExportHTML() + C("body") + C("html");
   dl("﻿" + html, contractFileName("doc"), "application/msword");
 });
 
