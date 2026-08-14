@@ -111,7 +111,7 @@ textarea{resize:vertical;min-height:70px;font-size:13.5px}
 .iconbtn:hover{background:var(--bg2);border-color:var(--line2);color:var(--accent)}
 .iconbtn.danger:hover{color:var(--red);border-color:color-mix(in srgb,var(--red) 45%,transparent);background:color-mix(in srgb,var(--red) 10%,transparent)}
 /* 用 border 畫三角形，不依賴字型（▾ 是 small triangle，字形太小） */
-.iconbtn .chev{
+.chev{
   width:0;height:0;display:block;
   border-left:6px solid transparent;
   border-right:6px solid transparent;
@@ -145,7 +145,7 @@ textarea{resize:vertical;min-height:70px;font-size:13.5px}
 .btn.ghost.on{color:var(--blue);border-color:color-mix(in srgb,var(--blue) 45%,transparent);background:color-mix(in srgb,var(--blue) 10%,transparent)}
 .inline-chk{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--text);padding:7px 0}
 .inline-chk input{width:15px;height:15px;accent-color:var(--accent);margin:0}
-.twbox{border-top:1px dashed var(--line2);padding-top:12px}
+.twbox{margin-top:12px}
 .twbox .net{font-weight:700;color:var(--green);font-size:14px}
 .twbox .net span:last-child{color:var(--green)}
 .sec-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
@@ -191,9 +191,20 @@ textarea{resize:vertical;min-height:70px;font-size:13.5px}
 /* ---------- Summary ---------- */
 .side{position:sticky;top:74px}
 @media(max-width:1080px){.side{position:static}}
-.total-box{padding:16px}
-.brk{display:flex;flex-direction:column;gap:9px;margin-bottom:14px}
-.brk-item{display:flex;flex-direction:column;gap:4px}
+/* 側欄自己捲動，總計釘在頂端 —— 內容再長也不會看不到總價 */
+.total-box{padding:0 16px 16px}
+.side .total-box{max-height:calc(100vh - 132px);overflow-y:auto}
+.side .grand{position:sticky;top:0;z-index:2;background:var(--panel);padding-top:16px}
+@media(max-width:1080px){
+  .side .total-box{max-height:none;overflow:visible}
+  .side .grand{position:static}
+}
+@media print{
+  .side .total-box{max-height:none!important;overflow:visible!important}
+  .side .grand{position:static!important}
+}
+.brk{display:flex;flex-direction:column;gap:7px}
+.brk-item{display:flex;flex-direction:column;gap:3px}
 .brk-top{display:flex;justify-content:space-between;gap:10px;font-size:12.5px}
 .brk-top span:first-child{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .brk-top span:last-child{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
@@ -203,7 +214,8 @@ textarea{resize:vertical;min-height:70px;font-size:13.5px}
 .line{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px}
 .line span:last-child{font-family:var(--mono);font-variant-numeric:tabular-nums}
 .line.mut{color:var(--muted);font-size:12.5px}
-.grand{margin-top:14px;padding-top:14px;border-top:2px solid var(--accent);display:flex;flex-direction:column;gap:2px}
+/* 總計置頂：最重要的數字永遠在視線內，不必捲動 */
+.grand{padding-bottom:12px;border-bottom:2px solid var(--accent);display:flex;flex-direction:column;gap:2px}
 .grand .lbl{font-size:12px;color:var(--muted);letter-spacing:.05em}
 .grand .val{font-family:var(--mono);font-size:27px;font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums;letter-spacing:-.02em;word-break:break-all}
 .kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
@@ -211,10 +223,28 @@ textarea{resize:vertical;min-height:70px;font-size:13.5px}
 .kpi .k{font-size:10.5px;color:var(--faint);letter-spacing:.03em}
 .kpi .v{font-family:var(--mono);font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;margin-top:2px}
 .adj{display:flex;flex-direction:column;gap:10px}
+/* 主區用多欄排版，6 個調整項不佔一整條 */
+.adj.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(228px,1fr));gap:11px 22px}
 .adj-row{display:flex;align-items:center;gap:8px;font-size:13px}
 .adj-row label{flex:1;color:var(--muted);display:flex;align-items:center;gap:7px}
 .adj-row input[type=number]{width:72px;text-align:right;padding:5px 8px}
+.adj.cols .adj-row input[type=number]{width:88px}
 .adj-row input[type=checkbox]{width:15px;height:15px;accent-color:var(--accent)}
+.adj-row .pc{color:var(--faint);font-size:12px;width:11px;flex:none}
+
+/* 側欄可收合區段 */
+.foldsec{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
+.foldhead{
+  display:flex;align-items:center;gap:8px;width:100%;
+  background:transparent;border:none;padding:2px 0;
+  color:var(--muted);font-size:11.5px;font-weight:600;letter-spacing:.05em;
+  text-align:left;transition:.15s;
+}
+.foldhead:hover{color:var(--accent)}
+.foldhead .chev{margin-left:auto}
+.foldbody{padding-top:11px}
+.foldsec.closed .foldbody{display:none}
+.foldsec.closed .chev{transform:rotate(-90deg)}
 .saved{font-size:11px;color:var(--faint);display:flex;align-items:center;gap:5px}
 .saved .dot{width:6px;height:6px;border-radius:50%;background:var(--green)}
 
@@ -290,6 +320,10 @@ body.modal-open{overflow:hidden}
   .row.off,.sec.off{display:none!important}
   .side{position:static}
   .grand .val{font-size:20px}
+  /* 列印時收合的區段一律展開 */
+  .foldhead{display:none!important}
+  .foldsec.closed .foldbody{display:block!important}
+  .foldsec{border-top:1px solid #ccc}
   @page{margin:14mm}
 
   /* 合約預覽開啟時，只印合約 */

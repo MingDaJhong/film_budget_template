@@ -75,8 +75,38 @@
     </section>
 
     <section class="card no-print" id="twCard">
-      <div class="card-head"><h2><span class="ico">🧮</span>稅務與實拿試算（台灣）</h2></div>
+      <div class="card-head"><h2><span class="ico">🧮</span>金額調整與稅務</h2></div>
       <div class="card-body">
+        <h3 class="grp" style="margin-top:0">金額調整</h3>
+        <p class="note" style="margin-top:0">這些比例會套在直接成本之上，結果即時反映到右側總覽。</p>
+        <div class="adj cols">
+          <div class="adj-row">
+            <label><input type="checkbox" id="a_rushOn">趕件加成</label>
+            <input type="number" id="a_rush" min="0" step="5"><span class="pc">%</span>
+          </div>
+          <div class="adj-row">
+            <label><input type="checkbox" id="a_passFeeOn">代墊款管理費</label>
+            <input type="number" id="a_passFee" min="0" step="1"><span class="pc">%</span>
+          </div>
+          <div class="adj-row">
+            <label><input type="checkbox" id="a_conOn">預備金／管理費</label>
+            <input type="number" id="a_con" min="0" step="1"><span class="pc">%</span>
+          </div>
+          <div class="adj-row">
+            <label><input type="checkbox" id="a_profOn">利潤／服務費</label>
+            <input type="number" id="a_prof" min="0" step="1"><span class="pc">%</span>
+          </div>
+          <div class="adj-row">
+            <label><input type="checkbox" id="a_taxOn">稅金</label>
+            <input type="number" id="a_tax" min="0" step="0.5"><span class="pc">%</span>
+          </div>
+          <div class="adj-row">
+            <label>折扣（直接扣除）</label>
+            <input type="number" id="a_disc" min="0" step="100"><span class="pc"></span>
+          </div>
+        </div>
+
+        <h3 class="grp">稅務與實拿試算（台灣）</h3>
         <div class="adj" style="margin-bottom:14px">
           <div class="adj-row"><label><input type="checkbox" id="w_on">在總覽顯示「你實拿多少」</label></div>
         </div>
@@ -194,63 +224,13 @@
     <section class="card">
       <div class="card-head"><h2><span class="ico">💰</span>成本總覽</h2></div>
       <div class="total-box">
-        <div class="brk" id="brk"></div>
-
-        <div class="lines">
-          <div class="line"><span>直接成本合計</span><span id="t_direct">—</span></div>
-        </div>
-
-        <div class="lines" id="passBox" style="display:none;margin-top:10px">
-          <div class="line mut"><span>其中代墊款（含管理費）</span><span id="t_pass">—</span></div>
-          <div class="line mut"><span>自有收入部分</span><span id="t_own">—</span></div>
-        </div>
-
-        <div class="lines" id="actBox" style="display:none;margin-top:10px">
-          <div class="line"><span>實際支出合計</span><span id="t_actual">—</span></div>
-          <div class="line"><span>差異</span><span id="t_diff">—</span></div>
-        </div>
-
-        <div class="adj" style="margin-top:12px">
-          <div class="adj-row">
-            <label><input type="checkbox" id="a_rushOn">趕件加成</label>
-            <input type="number" id="a_rush" min="0" step="5"><span style="color:var(--faint);font-size:12px">%</span>
-          </div>
-          <div class="adj-row">
-            <label><input type="checkbox" id="a_passFeeOn">代墊款管理費</label>
-            <input type="number" id="a_passFee" min="0" step="1"><span style="color:var(--faint);font-size:12px">%</span>
-          </div>
-          <div class="adj-row">
-            <label><input type="checkbox" id="a_conOn">預備金／管理費</label>
-            <input type="number" id="a_con" min="0" step="1"><span style="color:var(--faint);font-size:12px">%</span>
-          </div>
-          <div class="adj-row">
-            <label><input type="checkbox" id="a_profOn">利潤／服務費</label>
-            <input type="number" id="a_prof" min="0" step="1"><span style="color:var(--faint);font-size:12px">%</span>
-          </div>
-          <div class="adj-row">
-            <label><input type="checkbox" id="a_taxOn">稅金</label>
-            <input type="number" id="a_tax" min="0" step="0.5"><span style="color:var(--faint);font-size:12px">%</span>
-          </div>
-          <div class="adj-row">
-            <label>折扣（直接扣除）</label>
-            <input type="number" id="a_disc" min="0" step="100">
-          </div>
-        </div>
-
-        <div class="lines" style="margin-top:12px">
-          <div class="line mut" id="r_rush"><span>趕件加成</span><span>—</span></div>
-          <div class="line mut" id="r_con"><span>預備金</span><span>—</span></div>
-          <div class="line mut" id="r_prof"><span>利潤</span><span>—</span></div>
-          <div class="line mut" id="r_disc"><span>折扣</span><span>—</span></div>
-          <div class="line mut" id="r_tax"><span>稅金</span><span>—</span></div>
-        </div>
 
         <div class="grand">
           <span class="lbl">總計 TOTAL</span>
           <span class="val" id="t_total">—</span>
         </div>
 
-        <div class="lines twbox" id="twBox" style="margin-top:14px">
+        <div class="lines twbox" id="twBox">
           <div class="line mut"><span>客戶支付</span><span id="w_pay">—</span></div>
           <div class="line mut" id="w_l1"><span></span><span></span></div>
           <div class="line mut" id="w_l2"><span></span><span></span></div>
@@ -258,12 +238,45 @@
           <div class="line net"><span>你實拿</span><span id="w_net">—</span></div>
         </div>
 
-        <div class="kpis">
-          <div class="kpi"><div class="k">每分鐘成品成本</div><div class="v" id="k_min">—</div></div>
-          <div class="kpi"><div class="k">每拍攝日成本</div><div class="v" id="k_day">—</div></div>
-          <div class="kpi"><div class="k">拍攝期成本</div><div class="v" id="k_shoot">—</div></div>
-          <div class="kpi"><div class="k">後期成本</div><div class="v" id="k_post">—</div></div>
+        <div class="lines" style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
+          <div class="line"><span>直接成本合計</span><span id="t_direct">—</span></div>
         </div>
+
+        <div class="lines" id="passBox" style="display:none;margin-top:8px">
+          <div class="line mut"><span>其中代墊款（含管理費）</span><span id="t_pass">—</span></div>
+          <div class="line mut"><span>自有收入部分</span><span id="t_own">—</span></div>
+        </div>
+
+        <div class="lines" id="actBox" style="display:none;margin-top:8px">
+          <div class="line"><span>實際支出合計</span><span id="t_actual">—</span></div>
+          <div class="line"><span>差異</span><span id="t_diff">—</span></div>
+        </div>
+
+        <div class="lines" style="margin-top:8px">
+          <div class="line mut" id="r_rush"><span>趕件加成</span><span>—</span></div>
+          <div class="line mut" id="r_con"><span>預備金</span><span>—</span></div>
+          <div class="line mut" id="r_prof"><span>利潤</span><span>—</span></div>
+          <div class="line mut" id="r_disc"><span>折扣</span><span>—</span></div>
+          <div class="line mut" id="r_tax"><span>稅金</span><span>—</span></div>
+        </div>
+
+        <div class="foldsec" data-fold="brk">
+          <button class="foldhead" data-act="fold-side" data-k="brk">成本分佈<span class="chev"></span></button>
+          <div class="foldbody"><div class="brk" id="brk"></div></div>
+        </div>
+
+        <div class="foldsec" data-fold="kpi">
+          <button class="foldhead" data-act="fold-side" data-k="kpi">單位成本<span class="chev"></span></button>
+          <div class="foldbody">
+            <div class="kpis">
+              <div class="kpi"><div class="k">每分鐘成品成本</div><div class="v" id="k_min">—</div></div>
+              <div class="kpi"><div class="k">每拍攝日成本</div><div class="v" id="k_day">—</div></div>
+              <div class="kpi"><div class="k">拍攝期成本</div><div class="v" id="k_shoot">—</div></div>
+              <div class="kpi"><div class="k">後期成本</div><div class="v" id="k_post">—</div></div>
+            </div>
+          </div>
+        </div>
+
       </div>
     </section>
   </aside>

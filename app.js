@@ -54,6 +54,7 @@ function defaults(){
           rushOn:false, rush:20, passFeeOn:true, passFee:12 },
     /* 台灣稅務：公司開發票要加營業稅；個人接案被扣執行業務所得與二代健保補充保費 */
     tw:{ on:true, mode:"company", wht:10, nhi:2.11, nhiFloor:20000 },
+    ui:{ brk:true, kpi:false },         /* 側欄可收合區段：KPI 預設收起，讓側欄一屏看得完 */
     contract:{
       no:"", signDate:"",
       aName:"", aTax:"", aRep:"", aAddr:"", aContact:"", aPhone:"", aEmail:"",
@@ -237,6 +238,7 @@ function migrate(d){
   d.adj      = Object.assign(base.adj, d.adj || {});
   d.contract = Object.assign(base.contract, d.contract || {});
   d.tw       = Object.assign(base.tw, d.tw || {});
+  d.ui       = Object.assign(base.ui, d.ui || {});
   (d.secs || []).forEach(s => {
     if(s.pass == null) s.pass = false;
     (s.items || []).forEach(i => { if(i.act == null) i.act = 0; });
@@ -574,6 +576,13 @@ function renderSummary(){
   updatePayHint();
 }
 
+/* 套用側欄區段的收合狀態（切換專案、匯入時要跟著還原） */
+function renderFolds(){
+  $$("[data-fold]").forEach(el => {
+    el.classList.toggle("closed", !S.ui[el.dataset.fold]);
+  });
+}
+
 /* 依接案身分切換欄位與說明 */
 function renderTw(){
   const co = S.tw.mode === "company";
@@ -665,6 +674,7 @@ function fillForm(){
     if(el.type === "checkbox") el.checked = !!S.tw[k]; else el.value = S.tw[k];
   });
   $("#m_showAct").checked = !!S.meta.showAct;
+  renderFolds();
 }
 
 /* =========================================================
@@ -822,6 +832,13 @@ document.addEventListener("click", e => {
     $(`[data-sec="${sec.id}"] .sec-body`).innerHTML = itemsBody(sec);
     refresh(); return;
   }
+  if(act === "fold-side"){
+    const k = btn.dataset.k;
+    S.ui[k] = !S.ui[k];
+    btn.closest(".foldsec").classList.toggle("closed", !S.ui[k]);
+    save(); return;
+  }
+
   /* --- 專案面板 --- */
   if(act === "use-preset"){
     const p = PRESETS[+btn.dataset.i];
