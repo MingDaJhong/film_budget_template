@@ -110,6 +110,25 @@ textarea{resize:vertical;min-height:70px;font-size:13.5px}
 .sw input:checked + i{background:var(--accent)}
 .sw input:checked + i::after{transform:translateX(16px)}
 
+/* 區塊標題列的圖示鈕（收合／刪除） */
+.iconbtn{
+  width:30px;height:30px;padding:0;flex:none;
+  display:inline-flex;align-items:center;justify-content:center;
+  font-size:15px;line-height:1;color:var(--muted);
+  background:transparent;border:1px solid transparent;border-radius:8px;transition:.16s;
+}
+.iconbtn:hover{background:var(--bg2);border-color:var(--line2);color:var(--accent)}
+.iconbtn.danger:hover{color:var(--red);border-color:color-mix(in srgb,var(--red) 45%,transparent);background:color-mix(in srgb,var(--red) 10%,transparent)}
+/* 用 border 畫三角形，不依賴字型（▾ 是 small triangle，字形太小） */
+.iconbtn .chev{
+  width:0;height:0;display:block;
+  border-left:6px solid transparent;
+  border-right:6px solid transparent;
+  border-top:7px solid currentColor;
+  transition:transform .2s;
+}
+.sec.collapsed .iconbtn .chev{transform:rotate(-90deg)}
+
 /* ---------- Table ---------- */
 .tbl{width:100%}
 .thead,.row{
@@ -745,7 +764,7 @@ function revBody(sec){
 function secHTML(sec){
   const t = secTotal(sec, { post: (()=>{ const p = S.secs.find(x=>x.post); return p ? secTotal(p) : 0; })() });
   const cls = "card sec" + (sec.on ? "" : " off") + (sec.open === false ? " collapsed" : "");
-  const delBtn = sec.fixed ? "" : `<button class="btn sm ghost" data-act="del-sec" title="刪除此區塊">🗑</button>`;
+  const delBtn = sec.fixed ? "" : `<button class="iconbtn danger no-print" data-act="del-sec" title="刪除此區塊" aria-label="刪除此區塊">🗑</button>`;
   const title = sec.fixed
     ? `<h2 style="flex:1"><span class="ico">${sec.icon}</span>${esc(sec.name)}</h2>`
     : `<span class="ico">${sec.icon}</span><input class="sec-title" value="${esc(sec.name)}" data-act="ren-sec">`;
@@ -754,7 +773,7 @@ function secHTML(sec){
       <label class="sw no-print"><input type="checkbox" data-act="toggle-sec"${sec.on?" checked":""}><i></i></label>
       ${title}
       <span class="sec-sum" data-secsum="${sec.id}">${money(t)}</span>
-      <button class="btn sm ghost no-print" data-act="fold" title="收合／展開">${sec.open===false?"▸":"▾"}</button>
+      <button class="iconbtn no-print" data-act="fold" title="收合／展開" aria-label="收合或展開"><span class="chev"></span></button>
       ${delBtn}
     </div>
     <div class="card-body sec-body">${ sec.kind === "revision" ? revBody(sec) : itemsBody(sec) }</div>
@@ -936,8 +955,9 @@ document.addEventListener("click", e => {
     sec.on = btn.checked; secEl.classList.toggle("off", !sec.on); refresh(); return;
   }
   if(act === "fold"){
-    sec.open = sec.open === false; secEl.classList.toggle("collapsed", sec.open === false);
-    btn.textContent = sec.open === false ? "▸" : "▾"; save(); return;
+    sec.open = sec.open === false;
+    secEl.classList.toggle("collapsed", sec.open === false); /* 箭頭方向由 CSS 旋轉 */
+    save(); return;
   }
   if(act === "del-sec"){
     if(!confirm(`確定刪除「${sec.name}」整個區塊？`)) return;
