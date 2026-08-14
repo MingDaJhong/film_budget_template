@@ -42,7 +42,7 @@
       <div class="card-body">
         <div class="meta-grid">
           <div class="field"><label>專案名稱</label><input type="text" id="m_project" placeholder="例：品牌形象影片"></div>
-          <div class="field"><label>客戶／單位</label><input type="text" id="m_client" placeholder="例：○○股份有限公司"></div>
+          <div class="field"><label>客戶／單位</label><input type="text" id="m_client" placeholder="例：○○股份有限公司"><span class="hint">報價單與合約的甲方會沿用這裡</span></div>
           <div class="field"><label>報價日期</label><input type="date" id="m_date"></div>
           <div class="field"><label>幣別</label>
             <select id="m_cur">
@@ -142,8 +142,9 @@
         <p class="note" style="margin-top:0">兩份文件共用下列欄位，都會自動帶入上方的<b>總價、服務明細與修改次數</b>，可直接列印、存 PDF 或下載 Word 檔繼續編輯。實務順序是<b>先報價、談成再簽約</b>；預覽視窗右上角可以直接切換兩者。</p>
 
         <h3 class="grp">甲方（委製方／客戶）</h3>
+        <p class="note" style="margin-top:-4px">名稱會自動沿用上方「專案基本資訊」的<b>客戶／單位</b>，這裡只在需要填統編、地址、代表人等正式資料時才動。要用另一個抬頭（例如對方指定由關係企業簽約）再填名稱覆寫。</p>
         <div class="meta-grid">
-          <div class="field"><label>公司／個人名稱</label><input type="text" id="c_aName" placeholder="○○股份有限公司"></div>
+          <div class="field"><label>公司／個人名稱</label><input type="text" id="c_aName" placeholder="留白則沿用上方的「客戶／單位」"><span class="hint" id="aNameHint"></span></div>
           <div class="field"><label>統一編號</label><input type="text" id="c_aTax" placeholder="12345678"></div>
           <div class="field"><label>代表人</label><input type="text" id="c_aRep" placeholder="王大明"></div>
           <div class="field"><label>地址</label><input type="text" id="c_aAddr" placeholder="台北市…"></div>

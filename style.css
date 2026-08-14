@@ -193,33 +193,66 @@ textarea{resize:vertical;min-height:70px;font-size:13.5px}
 @media(max-width:1080px){.side{position:static}}
 /* 側欄自己捲動，總計釘在頂端 —— 內容再長也不會看不到總價 */
 .total-box{padding:0 16px 16px}
-/* 卡片高度 = 視窗高 − 上下留白，兩邊都是 84px，與 .side 的 sticky top 等寬。
-   卡片本身固定高、內容區自己捲，總計則釘在內容區頂端。 */
+/* 高度上限 = 視窗高 − 上留白 84（對齊 .side 的 sticky top）− 下留白 24。
+   用 max-height 而非 height：內容少時卡片跟著縮，不會留一截空白；
+   內容多時撐到上限、內容區自己捲，總計則釘在內容區頂端。 */
 .side .card{
   display:flex; flex-direction:column; margin-bottom:0;
-  height:calc(100vh - 168px);
-  height:calc(100dvh - 168px);
+  max-height:calc(100vh - 108px);
+  max-height:calc(100dvh - 108px);
 }
+/* 主區最後一塊的 margin 會把 grid row 撐長，導致捲到底時左右底線差一截 */
+.wrap > main > :last-child{margin-bottom:0}
 .side .card-head{flex:none}
 .side .total-box{flex:1;min-height:0;overflow-y:auto}
 .side .grand{position:sticky;top:0;z-index:2;background:var(--panel);padding-top:16px}
 @media(max-width:1080px){
-  .side .card{height:auto;display:block;margin-bottom:18px}
+  .side .card{max-height:none;height:auto;display:block;margin-bottom:18px}
   .side .total-box{overflow:visible}
   .side .grand{position:static}
 }
 @media print{
-  .side .card{height:auto!important;display:block!important}
+  .side .card{max-height:none!important;height:auto!important;display:block!important}
   .side .total-box{overflow:visible!important}
   .side .grand{position:static!important}
 }
 .brk{display:flex;flex-direction:column;gap:7px}
-.brk-item{display:flex;flex-direction:column;gap:3px}
+.brk-item{display:flex;flex-direction:column;gap:3px;transition:opacity .25s}
+.brk-item.off{opacity:.4}
 .brk-top{display:flex;justify-content:space-between;gap:10px;font-size:12.5px}
-.brk-top span:first-child{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.brk-top span:last-child{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
-.bar{height:4px;border-radius:4px;background:var(--line);overflow:hidden}
-.bar i{display:block;height:100%;background:var(--accent);border-radius:4px;transition:width .25s}
+.brk-top .bn{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.brk-top .bv{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.brk-top .bv b{font-weight:400;display:inline-block}
+.brk-top .bv em{color:var(--faint);font-style:normal;font-size:11px}
+
+/* 長條本體：黃 → 橘 → 紅的漸層。
+   漸層以「佔總成本比例」縮放（--gz），比例低時只露出左段的黃，
+   要吃掉夠大一塊預算才會推進到橘，極端時尾端才見紅。 */
+.bar{height:4px;border-radius:5px;background:var(--line);position:relative;overflow:hidden}
+.bar i{
+  display:block;height:100%;width:0;border-radius:5px;position:relative;
+  background:linear-gradient(90deg,#f5c542 0%,#f2ad33 32%,#ec7a2c 66%,#e2622e 85%,#dc4c4c 100%);
+  background-size:var(--gz,100%) 100%;
+  background-repeat:no-repeat;
+  transition:width .62s cubic-bezier(.22,1,.36,1),
+             background-size .62s cubic-bezier(.22,1,.36,1);
+}
+/* 數值變動時掃過的一道光 */
+.bar i::before{
+  content:"";position:absolute;inset:0;
+  background:linear-gradient(90deg,transparent,color-mix(in srgb,#fff 65%,transparent),transparent);
+  transform:translateX(-120%);opacity:0;
+}
+.brk-item.pulse .bar i::before{animation:sheen .9s cubic-bezier(.22,1,.36,1)}
+@keyframes sheen{0%{transform:translateX(-120%);opacity:1}100%{transform:translateX(220%);opacity:0}}
+/* 金額跳動一下 */
+.brk-item.pulse .bv b{animation:amtPop .55s cubic-bezier(.22,1,.36,1)}
+@keyframes amtPop{0%{transform:scale(1.09);color:var(--accent)}100%{transform:none;color:inherit}}
+
+@media(prefers-reduced-motion:reduce){
+  .bar i,.brk-item{transition:none}
+  .brk-item.pulse .bar i::before,.brk-item.pulse .bv b{animation:none}
+}
 .lines{border-top:1px solid var(--line);padding-top:12px;display:flex;flex-direction:column;gap:8px}
 .line{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px}
 .line span:last-child{font-family:var(--mono);font-variant-numeric:tabular-nums}

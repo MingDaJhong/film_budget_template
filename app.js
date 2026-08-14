@@ -522,17 +522,93 @@ function renderSections(){
 /* =========================================================
    繪製：總覽
    ========================================================= */
+/* ---------- 成本分佈的動畫 ----------
+   關鍵：只在區塊組成改變時重建 DOM，其餘時候更新既有節點。
+   innerHTML 整段重畫會換掉節點，CSS transition 就沒有前後值可以過渡。 */
+const REDUCED = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const CNT = new WeakMap();          /* 數字跑動的狀態：目前值與 rAF id */
+
+function countTo(el, target, fmt){
+  const st = CNT.get(el) || { cur: null, raf: 0 };
+  if(st.raf) cancelAnimationFrame(st.raf);
+  /* 第一次繪製、關閉動畫偏好、差距太小，或分頁在背景（rAF 會被凍結，
+     數字會卡在舊值）都直接寫上去，不跑動畫 */
+  if(st.cur === null || REDUCED || document.hidden || Math.abs(target - st.cur) < 1){
+    st.cur = target; st.raf = 0; CNT.set(el, st);
+    el.textContent = fmt(target); return;
+  }
+  const from = st.cur, t0 = performance.now(), dur = 420;
+  const step = now => {
+    const k = Math.min(1, (now - t0) / dur);
+    const e = 1 - Math.pow(1 - k, 3);                 /* easeOutCubic */
+    st.cur = from + (target - from) * e;
+    el.textContent = fmt(k < 1 ? st.cur : target);
+    st.raf = k < 1 ? requestAnimationFrame(step) : 0;
+    if(k >= 1) st.cur = target;
+    CNT.set(el, st);
+  };
+  st.raf = requestAnimationFrame(step);
+  CNT.set(el, st);
+}
+
+/* 漸層以「佔總成本比例」縮放：比例越高，露出的漸層越靠右（黃 → 橘 → 紅）。
+   到 EXTREME 這個門檻才會完整露出、尾端見紅。 */
+const EXTREME = 0.6;
+function gradientZoom(share){
+  const k = Math.min(1, share / EXTREME);
+  return k > 0.01 ? (100 / k).toFixed(1) + "%" : "10000%";
+}
+
+let brkSig = "";
+function renderBrk(c){
+  const host = $("#brk");
+  const sig = S.secs.map(s => s.id).join("|");
+  const built = sig !== brkSig;      /* 這次是重建：直接就位，不要有動畫 */
+  if(built){
+    brkSig = sig;
+    host.innerHTML = S.secs.map(s =>
+      `<div class="brk-item" data-brk="${s.id}">
+         <div class="brk-top">
+           <span class="bn"></span>
+           <span class="bv"><b data-amt></b><em data-pct></em></span>
+         </div>
+         <div class="bar"><i></i></div>
+       </div>`).join("");
+  }
+  const max = Math.max(1, ...S.secs.map(s => c.per[s.id] || 0));
+  S.secs.forEach(s => {
+    const el = host.querySelector(`[data-brk="${s.id}"]`); if(!el) return;
+    const v = c.per[s.id] || 0;
+    el.classList.toggle("off", !s.on);
+    el.querySelector(".bn").textContent = `${s.icon} ${s.name}`;
+    countTo(el.querySelector("[data-amt]"), v, money);
+    countTo(el.querySelector("[data-pct]"), c.direct > 0 ? v / c.direct * 100 : 0,
+            x => " " + Math.round(x) + "%");
+    const fill = el.querySelector(".bar i");
+    const w  = (v / max * 100).toFixed(1) + "%";
+    const gz = gradientZoom(c.direct > 0 ? v / c.direct : 0);
+    if(built){
+      /* 首次繪製：關掉過渡直接定位，避免長條從 0 長出來變成進場動畫 */
+      fill.style.transition = "none";
+      fill.style.width = w;
+      fill.style.setProperty("--gz", gz);
+      void fill.offsetWidth;
+      fill.style.transition = "";
+    }else if(fill.style.width !== w){
+      fill.style.width = w;
+      fill.style.setProperty("--gz", gz);
+      if(!REDUCED && !document.hidden){                /* 數值變動時掃一道光 */
+        el.classList.remove("pulse"); void el.offsetWidth; el.classList.add("pulse");
+      }
+    }else if(fill.style.getPropertyValue("--gz") !== gz){
+      fill.style.setProperty("--gz", gz);              /* 佔比變了但長度沒變 */
+    }
+  });
+}
+
 function renderSummary(){
   const c = compute();
-  const max = Math.max(1, ...S.secs.map(s => c.per[s.id] || 0));
-  $("#brk").innerHTML = S.secs.map(s => {
-    const v = c.per[s.id] || 0;
-    const pct = c.direct > 0 ? (v / c.direct * 100) : 0;
-    return `<div class="brk-item"${s.on?"":' style="opacity:.4"'}>
-      <div class="brk-top"><span>${s.icon} ${esc(s.name)}</span><span>${money(v)}<em style="color:var(--faint);font-style:normal;font-size:11px"> ${pct.toFixed(0)}%</em></span></div>
-      <div class="bar"><i style="width:${(v/max*100).toFixed(1)}%"></i></div>
-    </div>`;
-  }).join("");
+  renderBrk(c);
 
   $("#t_direct").textContent = money(c.direct);
   const setLine = (id, label, val, show) => {
@@ -574,6 +650,18 @@ function renderSummary(){
 
   renderTwLines(c);
   updatePayHint();
+}
+
+/* 讓「客戶／單位 → 合約甲方」的關係在畫面上看得見：
+   甲方留白時，用 placeholder 直接顯示實際會帶入的名稱 */
+function syncClientHint(){
+  const el = $("#c_aName"); if(!el) return;
+  const c = String(S.meta.client || "").trim();
+  el.placeholder = c ? `留白＝沿用「${c}」` : "留白則沿用上方的「客戶／單位」";
+  const tip = $("#aNameHint");
+  if(tip) tip.textContent = String(S.contract.aName || "").trim()
+    ? "已另外填寫，文件會用這裡的名稱"
+    : (c ? `目前會帶入：${c}` : "上方也還沒填，文件上會留空白讓你手寫");
 }
 
 /* 套用側欄區段的收合狀態（切換專案、匯入時要跟著還原） */
@@ -675,6 +763,7 @@ function fillForm(){
   });
   $("#m_showAct").checked = !!S.meta.showAct;
   renderFolds();
+  syncClientHint();
 }
 
 /* =========================================================
@@ -685,6 +774,7 @@ function bindForms(){
     $("#"+id).addEventListener("input", e => {
       const k = METAF[id];
       S.meta[k] = (e.target.type === "number") ? num(e.target.value) : e.target.value;
+      if(k === "client") syncClientHint();
       if(k === "cur" || k === "min" || k === "days" || k === "hours") refresh();
       else save();
     });
@@ -706,6 +796,7 @@ function bindForms(){
       S.contract[k] = el.type === "checkbox" ? el.checked
                     : el.type === "number"   ? num(el.value)
                     : el.value;
+      if(k === "aName") syncClientHint();
       updatePayHint(); save();
     });
   });
@@ -1008,9 +1099,13 @@ function rocDate(iso){
   const p = String(iso).split("-");
   return `中華民國 ${(+p[0]) - 1911} 年 ${+p[1]} 月 ${+p[2]} 日`;
 }
+/* 甲方名稱留白時沿用「專案基本資訊」的客戶／單位，與報價單同一套規則 */
+function clientName(){ return String(S.contract.aName || S.meta.client || "").trim(); }
+
 function partyCell(pre){
   const c = S.contract;
-  return `名稱：${val(c[pre+"Name"])}<br>
+  const name = pre === "a" ? clientName() : c.bName;
+  return `名稱：${val(name)}<br>
     統一編號：${val(c[pre+"Tax"])}　代表人：${val(c[pre+"Rep"])}<br>
     地址：${val(c[pre+"Addr"])}<br>
     聯絡人：${val(c[pre+"Contact"])}　電話：${val(c[pre+"Phone"])}<br>
@@ -1223,7 +1318,7 @@ function quoteHTML(){
   <table>
     <tr><th style="width:5.5em">承製方</th><td>${val(c.bName)}　${c.bTax?`統編：${esc(c.bTax)}`:""}<br>
         聯絡：${val(c.bContact)}　${val(c.bPhone)}　${val(c.bEmail)}</td></tr>
-    <tr><th>客戶</th><td>${val(c.aName || m.client)}　${c.aTax?`統編：${esc(c.aTax)}`:""}<br>
+    <tr><th>客戶</th><td>${val(clientName())}　${c.aTax?`統編：${esc(c.aTax)}`:""}<br>
         聯絡：${val(c.aContact)}　${val(c.aPhone)}　${val(c.aEmail)}</td></tr>
     <tr><th>報價日期</th><td>${dstr(m.date)}　　有效期限：<b>${valid}</b>（逾期價格得重新評估）</td></tr>
   </table>
@@ -1411,7 +1506,7 @@ $("#btnCsv").addEventListener("click", ()=>{
   const c = compute(), q = v => `"${String(v==null?"":v).replace(/"/g,'""')}"`;
   const L = [];
   L.push(["專案",S.meta.project].map(q).join(","));
-  L.push(["客戶",S.meta.client].map(q).join(","));
+  L.push(["客戶",clientName()].map(q).join(","));
   L.push(["日期",S.meta.date].map(q).join(","));
   L.push(["拍攝天數",S.meta.days,"影片長度(分)",S.meta.min].map(q).join(","));
   L.push("");
