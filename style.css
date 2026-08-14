@@ -189,18 +189,28 @@ textarea{resize:vertical;min-height:70px;font-size:13.5px}
 .formula b{color:var(--accent);font-weight:600}
 
 /* ---------- Summary ---------- */
-.side{position:sticky;top:74px}
+.side{position:sticky;top:84px;}
 @media(max-width:1080px){.side{position:static}}
 /* 側欄自己捲動，總計釘在頂端 —— 內容再長也不會看不到總價 */
 .total-box{padding:0 16px 16px}
-.side .total-box{max-height:calc(100vh - 132px);overflow-y:auto}
+/* 卡片高度 = 視窗高 − 上下留白，兩邊都是 84px，與 .side 的 sticky top 等寬。
+   卡片本身固定高、內容區自己捲，總計則釘在內容區頂端。 */
+.side .card{
+  display:flex; flex-direction:column; margin-bottom:0;
+  height:calc(100vh - 168px);
+  height:calc(100dvh - 168px);
+}
+.side .card-head{flex:none}
+.side .total-box{flex:1;min-height:0;overflow-y:auto}
 .side .grand{position:sticky;top:0;z-index:2;background:var(--panel);padding-top:16px}
 @media(max-width:1080px){
-  .side .total-box{max-height:none;overflow:visible}
+  .side .card{height:auto;display:block;margin-bottom:18px}
+  .side .total-box{overflow:visible}
   .side .grand{position:static}
 }
 @media print{
-  .side .total-box{max-height:none!important;overflow:visible!important}
+  .side .card{height:auto!important;display:block!important}
+  .side .total-box{overflow:visible!important}
   .side .grand{position:static!important}
 }
 .brk{display:flex;flex-direction:column;gap:7px}
