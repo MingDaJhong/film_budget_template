@@ -1,6 +1,6 @@
 # 🎬 影片拍攝成本試算表 Film Budget Calculator
 
-給影片拍攝者用的一頁式成本試算工具。純前端、單一 `index.html`、沒有任何相依套件，打開就能算。
+給影片拍攝者用的一頁式成本試算工具。純前端、沒有任何相依套件、不需要建置流程，打開就能算。
 
 **線上使用：** https://mingdajhong.github.io/film_budget_template/
 
@@ -108,9 +108,21 @@
 
 ---
 
+## 檔案結構
+
+```
+index.html    頁面結構
+style.css     樣式（含深／淺色主題與列印樣式）
+app.js        全部邏輯（計算、繪製、存檔、報價單／合約書產生）
+```
+
+三個檔案要放在同一個資料夾。沒有建置流程、沒有相依套件，也不需要 npm。
+
+> `app.js` 請維持外部檔案，不要 inline 回 `index.html`。Word 匯出那段字串裡有字面的 `</body>`，而 Live Server 這類開發伺服器會把熱重載用的 script 插在檔案第一個 `</body>` 之前 —— 一旦 inline，注入碼會把整段程式碼攔腰截斷。檔案開頭有詳細註解。
+
 ## 本機執行
 
-不需要任何建置流程，下載後直接用瀏覽器開啟 `index.html` 即可。
+下載後直接用瀏覽器開啟 `index.html` 即可（`file://` 也能正常運作）。
 
 ```bash
 git clone git@github.com:MingDaJhong/film_budget_template.git
