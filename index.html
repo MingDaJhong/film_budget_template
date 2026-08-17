@@ -21,15 +21,20 @@
     </div>
     <div class="tools">
       <span class="saved" id="savedTag"><span class="dot"></span>自動儲存</span>
-      <button class="btn sm" id="btnPanel">📁 專案 / 範本</button>
-      <button class="btn sm" id="btnTheme" title="切換深／淺色">🌓 主題</button>
-      <button class="btn sm" id="btnCsv">⬇ CSV</button>
-      <button class="btn sm" id="btnExport">⬇ JSON</button>
-      <button class="btn sm" id="btnImport">⬆ 匯入</button>
-      <button class="btn sm danger" id="btnReset">↺ 重設</button>
-      <button class="btn sm" id="btnQuote">📋 報價單</button>
-      <button class="btn sm" id="btnContract">📄 合約書</button>
-      <button class="btn sm primary" id="btnPrint">🖨 列印 / PDF</button>
+      <div class="bar-menu" data-row=".topbar-in">
+        <button class="btn sm bar-toggle" aria-label="展開工具選單" aria-expanded="false" aria-haspopup="true">☰ 選單</button>
+        <div class="bar-group">
+          <button class="btn sm" id="btnPanel">📁 專案 / 範本</button>
+          <button class="btn sm" id="btnTheme" title="切換深／淺色">🌓 主題</button>
+          <button class="btn sm" id="btnCsv">⬇ CSV</button>
+          <button class="btn sm" id="btnExport">⬇ JSON</button>
+          <button class="btn sm" id="btnImport">⬆ 匯入</button>
+          <button class="btn sm danger" id="btnReset">↺ 重設</button>
+          <button class="btn sm" id="btnQuote">📋 報價單</button>
+          <button class="btn sm" id="btnContract">📄 合約書</button>
+          <button class="btn sm primary" id="btnPrint">🖨 列印 / PDF</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -301,10 +306,15 @@
 <div class="modal" id="contractModal" hidden>
   <div class="modal-bar">
     <strong id="docTitle">📄 合約書預覽</strong>
-    <button class="btn sm" id="docSwap">📋 改看報價單</button>
-    <button class="btn sm" id="cCopy">📋 複製全文</button>
-    <button class="btn sm" id="cWord">⬇ Word (.doc)</button>
-    <button class="btn sm primary" id="cPrint">🖨 列印 / PDF</button>
+    <div class="bar-menu" data-row=".modal-bar">
+      <button class="btn sm bar-toggle" aria-label="展開文件選單" aria-expanded="false" aria-haspopup="true">☰ 選單</button>
+      <div class="bar-group">
+        <button class="btn sm" id="docSwap">📋 改看報價單</button>
+        <button class="btn sm" id="cCopy">📋 複製全文</button>
+        <button class="btn sm" id="cWord">⬇ Word (.doc)</button>
+        <button class="btn sm primary" id="cPrint">🖨 列印 / PDF</button>
+      </div>
+    </div>
     <button class="btn sm ghost" id="cClose">✕ 關閉</button>
   </div>
   <div class="doc" id="contractDoc"></div>

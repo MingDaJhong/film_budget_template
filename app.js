@@ -1384,6 +1384,7 @@ function openDoc(type){
   $("#contractModal").hidden = false;
   document.body.classList.add("modal-open");
   $("#contractModal").scrollTop = 0;
+  syncBarMenus();   /* 面板剛顯示才量得到寬度 */
 }
 function openContract(){
   openDoc("contract");
@@ -1415,6 +1416,8 @@ $("#cPrint").addEventListener("click", ()=> window.print());
 $("#contractModal").addEventListener("click", e => { if(e.target.id === "contractModal") closeContract(); });
 document.addEventListener("keydown", e => {
   if(e.key !== "Escape") return;
+  /* 漢堡選單開著時，Esc 先收選單，不要把整個視窗關掉 */
+  if(barMenus.some(m => m.menu.classList.contains("open"))){ closeBarMenus(); return; }
   if(!$("#contractModal").hidden) closeContract();
   else if(!$("#panelModal").hidden) closePanel();
 });
@@ -1582,6 +1585,68 @@ $("#fileIn").addEventListener("change", e => {
 });
 
 /* =========================================================
+   工具列漢堡選單
+   視窗寬 ≤1080px，或按鈕在該列排不下時，收進 ☰ 浮層。
+   「✕ 關閉」不在選單裡，任何寬度都常駐。
+   ========================================================= */
+const BAR_BP = 1080;
+const barMenus = [...document.querySelectorAll(".bar-menu")].map(menu => ({
+  menu,
+  row:    menu.closest(menu.dataset.row),
+  toggle: menu.querySelector(".bar-toggle"),
+  group:  menu.querySelector(".bar-group")
+}));
+
+function setBarOpen(m, on){
+  m.menu.classList.toggle("open", on);
+  m.toggle.setAttribute("aria-expanded", String(on));
+}
+function closeBarMenus(){ barMenus.forEach(m => setBarOpen(m, false)); }
+
+/* 量測：暫時關掉換行與縮放，看最右邊的按鈕有沒有頂出容器內緣 */
+function barOverflows(m){
+  const row = m.row;
+  if(!row.getClientRects().length) return false;   /* 面板還沒開，量不到 */
+  row.classList.add("measuring");
+  const rect  = row.getBoundingClientRect();
+  const limit = rect.right - parseFloat(getComputedStyle(row).paddingRight);
+  let right = rect.left;
+  row.querySelectorAll(".btn:not(.bar-toggle), .saved, strong").forEach(el => {
+    if(el.getClientRects().length) right = Math.max(right, el.getBoundingClientRect().right);
+  });
+  row.classList.remove("measuring");
+  return right > limit + .5;
+}
+
+function syncBarMenus(){
+  const narrow = window.innerWidth <= BAR_BP;
+  /* 先全部展開，量測才是「不收合時會佔多寬」 */
+  barMenus.forEach(m => { m.menu.classList.remove("collapsed"); setBarOpen(m, false); });
+  barMenus.forEach(m => {
+    if(narrow || barOverflows(m)) m.menu.classList.add("collapsed");
+  });
+}
+
+barMenus.forEach(m => {
+  m.toggle.addEventListener("click", e => {
+    e.stopPropagation();
+    const on = !m.menu.classList.contains("open");
+    closeBarMenus();
+    setBarOpen(m, on);
+  });
+  /* 點了選單內的按鈕就收起來 */
+  m.group.addEventListener("click", e => { if(e.target.closest(".btn")) setBarOpen(m, false); });
+});
+document.addEventListener("click", closeBarMenus);
+
+/* 用 setTimeout 而非 rAF：分頁在背景時 rAF 會被凍結，切回來就對不上了 */
+let barTimer = 0;
+window.addEventListener("resize", () => {
+  clearTimeout(barTimer);
+  barTimer = setTimeout(syncBarMenus, 120);
+});
+
+/* =========================================================
    啟動
    ========================================================= */
 (function init(){
@@ -1598,6 +1663,9 @@ $("#fileIn").addEventListener("change", e => {
   bindForms();
   renderTw();
   renderAll();
+  syncBarMenus();
+  /* 字型載入後按鈕寬度會變，重新量一次 */
+  if(document.fonts && document.fonts.ready) document.fonts.ready.then(syncBarMenus);
 })();
 
 })();

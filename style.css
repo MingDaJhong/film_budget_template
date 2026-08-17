@@ -49,6 +49,30 @@ input,select,textarea{font-family:inherit;font-size:inherit;color:inherit}
 .brand small{display:block;color:var(--faint);font-size:11.5px;font-weight:400;letter-spacing:.03em}
 .tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 
+/* ---------- 工具列漢堡選單 ----------
+   展開狀態下 .bar-menu / .bar-group 都是 display:contents，
+   等於不存在，裡面的按鈕照舊直接排在工具列上；
+   收合時（JS 加 .collapsed）外框變成定位容器，按鈕收進浮層。 */
+.bar-menu,.bar-group{display:contents}
+.bar-menu > .bar-toggle{display:none}
+.bar-menu.collapsed{display:inline-flex;position:relative}
+.bar-menu.collapsed > .bar-toggle{display:inline-flex}
+.bar-menu.collapsed > .bar-group{
+  display:none; position:absolute; top:calc(100% + 8px); right:0; z-index:120;
+  flex-direction:column; align-items:stretch; gap:6px;
+  min-width:190px; padding:8px;
+  background:var(--panel); border:1px solid var(--line2);
+  border-radius:var(--radius); box-shadow:var(--shadow);
+}
+.bar-menu.collapsed.open > .bar-group{display:flex}
+.bar-menu.collapsed.open > .bar-toggle{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.bar-menu.collapsed > .bar-group .btn{
+  width:100%; justify-content:flex-start; padding:8px 10px; font-size:13px;
+}
+/* 量測用：暫時關掉換行與縮放，才能用 scrollWidth 讀出真實需求寬度 */
+.measuring,.measuring *{flex-wrap:nowrap!important}
+.measuring *{flex-shrink:0!important;white-space:nowrap!important}
+
 .btn{
   border:1px solid var(--line2); background:var(--panel2); color:var(--text);
   padding:7px 12px; border-radius:var(--radius-sm); font-size:13px; font-weight:500;
