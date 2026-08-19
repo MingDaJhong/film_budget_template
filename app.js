@@ -14,11 +14,13 @@
    ========================================================= */
 const KEY = "film-budget-v1";
 
+/* base：這個單位的「單價」該填什麼。半日與加班時的小計會再乘上係數／倍率，
+   欄位只寫「單價」的話，使用者很自然會填半日價進去，結果被再打一次折。 */
 const UNITS = {
   day:    {label:"天",       dur:"天數",   needDur:true},
-  half:   {label:"半日",     dur:"半日數", needDur:true},
+  half:   {label:"半日",     dur:"半日數", needDur:true, base:"全日價", coef:"半日係數"},
   hour:   {label:"小時",     dur:"時數",   needDur:true},
-  ot:     {label:"加班時",   dur:"時數",   needDur:true},
+  ot:     {label:"加班時",   dur:"時數",   needDur:true, base:"平日時薪", coef:"加班倍率"},
   min:    {label:"成品分鐘",  dur:"影片分鐘", needDur:"auto"},
   flat:   {label:"式（整案）", dur:"—",     needDur:false},
   each:   {label:"次",       dur:"—",      needDur:false},
@@ -34,22 +36,60 @@ const USAGE = {
   years: { y1:{l:"1 年",p:0}, y2:{l:"2 年",p:15}, y3:{l:"3 年",p:25}, perp:{l:"永久買斷",p:50} }
 };
 
+/* 跨專案共用的「我的資料」：乙方（承製方）身分與慣用條款。
+   每接一個案子重打一次自己的統編地址，是這個工具最大的重複勞動 ——
+   所以這些欄位存在專案之外，開新專案時自動帶入。
+   甲方、日期、交付項目這類每案不同的東西不在其中。 */
+const PKEY = KEY + ":profile";
+const PROFILE_KEYS = [
+  "bName","bTax","bRep","bAddr","bContact","bPhone","bEmail",
+  "spec","acceptDays","validDays","exclude",
+  "pay1","pay2","pay3","payDays",
+  "copyright","showcase","confidential","showPrice",
+  "penalty","penaltyCap","court"
+];
+function loadProfile(){
+  try{
+    const p = JSON.parse(localStorage.getItem(PKEY) || "null");
+    return (p && typeof p === "object") ? p : {};
+  }catch(e){ return {}; }
+}
+function saveProfile(){
+  const p = {};
+  PROFILE_KEYS.forEach(k => { p[k] = S.contract[k]; });
+  try{ localStorage.setItem(PKEY, JSON.stringify(p)); }catch(e){}
+}
+
+/* 我的常用範本：把調整過的區塊存起來，跨專案共用。
+   內建的 TEMPLATES 是寫死的參考價，用久了每個人的行情都不一樣。 */
+const MTKEY = KEY + ":mytpl";
+function loadMyTpl(){
+  try{
+    const a = JSON.parse(localStorage.getItem(MTKEY) || "null");
+    return Array.isArray(a) ? a : [];
+  }catch(e){ return []; }
+}
+function saveMyTpl(list){
+  try{ localStorage.setItem(MTKEY, JSON.stringify(list)); return true; }
+  catch(e){ return false; }
+}
+
 let uid = 0;
 const nid = () => "i" + (Date.now().toString(36)) + (uid++).toString(36);
 
 const item = (name, unit, price, qty, dur, on) => ({
   id: nid(), name, unit, price, qty: qty == null ? 1 : qty,
-  dur: dur == null ? 1 : dur, on: on !== false, act: 0
+  dur: dur == null ? 1 : dur, on: on !== false, opt: false, act: 0
 });
 
 /* =========================================================
    預設資料
    ========================================================= */
 function defaults(){
-  return {
+  const d = {
     meta:{ project:"", client:"", date:new Date().toISOString().slice(0,10),
            cur:"NT$", days:1, hours:8, min:3, note:"",
-           halfRate:60, otRate:1.5, showAct:false },
+           halfRate:60, otRate:1.5, showAct:false, target:0 },
     adj:{ conOn:true, con:10, profOn:false, prof:15, taxOn:true, tax:5, disc:0,
           rushOn:false, rush:20, passFeeOn:true, passFee:12 },
     /* 台灣稅務：公司開發票要加營業稅；個人接案被扣執行業務所得與二代健保補充保費 */
@@ -68,6 +108,15 @@ function defaults(){
       penalty:0.3, penaltyCap:20, court:"臺灣臺北地方法院", extra:""
     },
     secs:[
+      /* 人力通常是整份預算裡最大的一塊，預設就該在，不用自己從範本 chips 加 */
+      {id:"crew", kind:"items", icon:"👥", name:"人員／團隊", on:true, open:true, fixed:true, sync:true, items:[
+        item("導演","day",12000,1,1),
+        item("攝影師","day",10000,1,1),
+        item("燈光師","day",6000,1,1,false),
+        item("收音師","day",6000,1,1,false),
+        item("攝影助理","day",3500,1,1),
+        item("製片／執行","day",5000,1,1,false)
+      ]},
       {id:"equip", kind:"items", icon:"🎥", name:"器材成本", on:true, open:true, fixed:true, sync:true, items:[
         item("攝影機機身（A cam）","day",8000,1,1),
         item("鏡頭組","day",4000,1,1),
@@ -102,6 +151,9 @@ function defaults(){
       ]}
     ]
   };
+  /* 「我的資料」蓋在預設值上：新專案直接帶入乙方身分與慣用條款 */
+  Object.assign(d.contract, loadProfile());
+  return d;
 }
 
 /* 專案類型範本：套用後直接生出一整份合理預算，價格為台灣市場中間帶，可再自行調整
@@ -114,7 +166,7 @@ const PRESETS = [
     rev:{free:2,total:3,amount:2000},
     travel:[["交通／油資","flat",1500,1]],
     misc:[["餐飲（人次）","person",150,4],["耗材","flat",800,1]],
-    add:[{name:"人員", icon:"👥", items:[["導演／攝影","day",12000,1],["攝影助理","day",3500,1]]}] },
+    crew:[["導演／攝影","day",12000,1],["攝影助理","day",3500,1]] },
 
   { id:"corp", icon:"🏢", name:"企業形象片", desc:"3–5 分鐘 · 2 天拍攝 · 含腳本與訪談",
     meta:{days:2, hours:10, min:4},
@@ -123,8 +175,8 @@ const PRESETS = [
     rev:{free:2,total:3,amount:4000},
     travel:[["器材車租借","day",2500,1],["油資／過路費","flat",2000,1],["停車費","day",300,1]],
     misc:[["餐飲（人次）","person",180,16],["耗材","flat",2000,1],["場地／勘景","day",3000,1]],
-    add:[{name:"人員", icon:"👥", items:[["導演","day",15000,1],["攝影師","day",12000,1],["燈光師","day",7000,1],["收音師","day",6500,1],["製片／執行","day",6000,1]]},
-         {name:"前期企劃", icon:"📝", items:[["腳本企劃","flat",25000,1],["分鏡","flat",8000,1]]}] },
+    crew:[["導演","day",15000,1],["攝影師","day",12000,1],["燈光師","day",7000,1],["收音師","day",6500,1],["製片／執行","day",6000,1]],
+    add:[{name:"前期企劃", icon:"📝", items:[["腳本企劃","flat",25000,1],["分鏡","flat",8000,1]]}] },
 
   { id:"product", icon:"📦", name:"產品／電商影片", desc:"1–2 分鐘 · 棚拍 · 靜物或情境",
     meta:{days:1, hours:10, min:1.5},
@@ -133,8 +185,8 @@ const PRESETS = [
     rev:{free:2,total:3,amount:3000},
     travel:[["器材運送","flat",2000,1]],
     misc:[["耗材／背景紙","flat",2500,1],["餐飲（人次）","person",180,6]],
-    add:[{name:"人員", icon:"👥", items:[["導演／攝影","day",13000,1],["燈光助理","day",4000,1],["美術陳設","day",6000,1]]},
-         {name:"棚租", icon:"🏠", items:[["攝影棚","day",12000,1]]}] },
+    crew:[["導演／攝影","day",13000,1],["燈光助理","day",4000,1],["美術陳設","day",6000,1]],
+    add:[{name:"棚租", icon:"🏠", items:[["攝影棚","day",12000,1]]}] },
 
   { id:"event", icon:"🎤", name:"活動紀錄", desc:"論壇／發表會／尾牙 · 多機收音",
     meta:{days:1, hours:10, min:5},
@@ -143,7 +195,7 @@ const PRESETS = [
     rev:{free:1,total:2,amount:3000},
     travel:[["器材車","day",2500,1],["停車／過路","flat",1000,1]],
     misc:[["餐飲（人次）","person",180,5],["耗材／電池","flat",1500,1]],
-    add:[{name:"人員", icon:"👥", items:[["導播／主機","day",12000,1],["攝影師","day",8000,2],["收音師","day",6500,1]]}] },
+    crew:[["導播／主機","day",12000,1],["攝影師","day",8000,2],["收音師","day",6500,1]] },
 
   { id:"mv", icon:"🎵", name:"音樂錄影帶 MV", desc:"3–5 分鐘 · 含美術造型與演員",
     meta:{days:2, hours:12, min:4},
@@ -152,8 +204,8 @@ const PRESETS = [
     rev:{free:2,total:3,amount:6000},
     travel:[["器材車＋司機","day",5000,1],["劇組交通","flat",6000,1]],
     misc:[["餐飲（人次）","person",200,30],["耗材","flat",4000,1],["保險","flat",3000,1]],
-    add:[{name:"人員", icon:"👥", items:[["導演","day",25000,1],["攝影指導","day",18000,1],["燈光師","day",10000,1],["場務","day",4500,2],["製片","day",8000,1]]},
-         {name:"演員／造型", icon:"🎭", items:[["主要演員","day",12000,1],["臨時演員","person",2500,4],["妝髮","day",6000,1],["服裝造型","day",6000,1]]},
+    crew:[["導演","day",25000,1],["攝影指導","day",18000,1],["燈光師","day",10000,1],["場務","day",4500,2],["製片","day",8000,1]],
+    add:[{name:"演員／造型", icon:"🎭", items:[["主要演員","day",12000,1],["臨時演員","person",2500,4],["妝髮","day",6000,1],["服裝造型","day",6000,1]]},
          {name:"場地／美術", icon:"🎨", items:[["場地租借","day",15000,1],["美術陳設","flat",20000,1]]}] },
 
   { id:"interview", icon:"💬", name:"人物訪談／專訪", desc:"半天拍攝 · 雙機訪談 · 含 B-roll",
@@ -163,7 +215,7 @@ const PRESETS = [
     rev:{free:2,total:2,amount:2500},
     travel:[["交通／油資","flat",1500,1],["停車費","day",300,1]],
     misc:[["餐飲（人次）","person",150,3],["耗材","flat",800,1]],
-    add:[{name:"人員", icon:"👥", items:[["導演／訪談","half",12000,1],["攝影師","half",9000,1],["收音／助理","half",5000,1]]}] },
+    crew:[["導演／訪談","half",12000,1],["攝影師","half",9000,1],["收音／助理","half",5000,1]] },
 
   { id:"course", icon:"🎓", name:"課程／教學影片", desc:"多支成集 · 棚內固定機位 · 含字幕",
     meta:{days:2, hours:8, min:60},
@@ -172,8 +224,8 @@ const PRESETS = [
     rev:{free:1,total:2,amount:2000},
     travel:[["器材運送","flat",2000,1]],
     misc:[["餐飲（人次）","person",180,8],["耗材","flat",1500,1]],
-    add:[{name:"人員", icon:"👥", items:[["導演／攝影","day",12000,1],["助理","day",4000,1]]},
-         {name:"棚租", icon:"🏠", items:[["攝影棚","day",10000,1]]}] },
+    crew:[["導演／攝影","day",12000,1],["助理","day",4000,1]],
+    add:[{name:"棚租", icon:"🏠", items:[["攝影棚","day",10000,1]]}] },
 
   { id:"wedding", icon:"💒", name:"婚禮紀錄", desc:"迎娶＋宴客整日 · 快剪或精華",
     meta:{days:1, hours:12, min:8},
@@ -182,16 +234,18 @@ const PRESETS = [
     rev:{free:1,total:2,amount:2500},
     travel:[["交通（跨場地）","flat",3000,1],["停車費","flat",600,1]],
     misc:[["餐飲","person",0,2],["耗材／電池","flat",1200,1]],
-    add:[{name:"人員", icon:"👥", items:[["主攝影師","day",18000,1],["副攝影師","day",10000,1]]}] }
+    crew:[["主攝影師","day",18000,1],["副攝影師","day",10000,1]] }
 ];
 
+/* 格式：[名稱, 單位, 單價, 數量(可省略，預設 1)]
+   以「人」「次」計價的項目常常不只一份，帶個合理的預設值省一次修改 */
 const TEMPLATES = [
   {name:"人員／團隊", icon:"👥", items:[["導演","day",12000],["攝影師","day",10000],["燈光師","day",6000],["收音師","day",6000],["攝影助理","day",3500],["製片／執行","day",5000]]},
-  {name:"演員／模特兒", icon:"🎭", items:[["主要演員","day",8000],["臨時演員","person",2000],["肖像授權（一年）","flat",15000]]},
+  {name:"演員／模特兒", icon:"🎭", items:[["主要演員","day",8000],["臨時演員","person",2000,4],["肖像授權（一年）","flat",15000]]},
   {name:"場地租借", icon:"🏠", items:[["攝影棚","day",12000],["外景場地","day",6000],["場地保證金／清潔","flat",3000]]},
   {name:"美術／造型", icon:"🎨", items:[["美術設計","day",6000],["道具採購","flat",5000],["服裝造型","day",4500],["妝髮","day",4000]]},
   {name:"空拍／特殊器材", icon:"🚁", items:[["空拍機＋飛手","day",12000],["電影級穩定器","day",6000],["軌道／搖臂","day",8000]]},
-  {name:"授權／發布", icon:"📤", items:[["音樂授權","flat",6000],["圖庫／素材","flat",3000],["多平台版本輸出","each",2000]]}
+  {name:"授權／發布", icon:"📤", items:[["音樂授權","flat",6000],["圖庫／素材","flat",3000],["多平台版本輸出","each",2000,2]]}
 ];
 
 /* =========================================================
@@ -228,7 +282,8 @@ function addProject(name, data){
 }
 function curProject(){ return STORE.projects.find(x => x.id === STORE.current); }
 function saveStore(){
-  try{ localStorage.setItem(SKEY, JSON.stringify(STORE)); }catch(e){}
+  try{ localStorage.setItem(SKEY, JSON.stringify(STORE)); return true; }
+  catch(e){ return false; }
 }
 
 /* 舊版存檔沒有新欄位時補齊，避免讀回後出錯 */
@@ -237,11 +292,23 @@ function migrate(d){
   d.meta     = Object.assign(base.meta, d.meta || {});
   d.adj      = Object.assign(base.adj, d.adj || {});
   d.contract = Object.assign(base.contract, d.contract || {});
+  /* 專案自己填過的一律優先；只有留白的欄位才用「我的資料」補上。
+     數字 0 與 false 都是有效設定，不在補值範圍內。 */
+  const prof = loadProfile();
+  PROFILE_KEYS.forEach(k => {
+    if(prof[k] === undefined) return;
+    const v = d.contract[k];
+    if(v === "" || v == null) d.contract[k] = prof[k];
+  });
   d.tw       = Object.assign(base.tw, d.tw || {});
   d.ui       = Object.assign(base.ui, d.ui || {});
   (d.secs || []).forEach(s => {
     if(s.pass == null) s.pass = false;
-    (s.items || []).forEach(i => { if(i.act == null) i.act = 0; });
+    if(s.lock == null) s.lock = false;
+    (s.items || []).forEach(i => {
+      if(i.act == null) i.act = 0;
+      if(i.opt == null) i.opt = false;
+    });
   });
   /* 舊存檔沒有授權區塊，補進修改次數後面 */
   if(!d.secs.some(s => s.kind === "usage")){
@@ -263,24 +330,41 @@ function load(){
 }
 let saveTimer = null;
 function save(){
+  if(sharedMode) return;      /* 別人分享的內容，使用者還沒決定要不要收下 */
   clearTimeout(saveTimer);
   saveTimer = setTimeout(()=>{
-    try{
-      const p = curProject();
-      if(p){
-        p.data = S; p.updated = Date.now();
-        if(String(S.meta.project||"").trim()) p.name = S.meta.project.trim();
-      }
-      saveStore();
-      localStorage.setItem(KEY, JSON.stringify(S));   /* 保留舊鍵，匯出／相容用 */
-      flashSaved();
-    }catch(e){}
+    const p = curProject();
+    if(p){
+      p.data = S; p.updated = Date.now();
+      if(String(S.meta.project||"").trim()) p.name = S.meta.project.trim();
+    }
+    let ok = saveStore();
+    /* 保留舊鍵，匯出／相容用 */
+    try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){ ok = false; }
+    if(ok) flashSaved(); else flagSaveFailed();
   },350);
 }
 function flashSaved(){
   const t = document.getElementById("savedTag");
+  t.classList.remove("failed");
+  t.title = "";
+  document.getElementById("savedText").textContent = "自動儲存";
   t.style.color = "var(--green)";
   setTimeout(()=>{ t.style.color = ""; }, 600);
+}
+/* 儲存空間滿了不能靜靜地過去 —— 使用者以為存好了，關掉分頁就沒了 */
+let quotaWarned = false;
+function flagSaveFailed(){
+  const t = document.getElementById("savedTag");
+  t.classList.add("failed");
+  t.style.color = "";
+  t.title = "瀏覽器的儲存空間滿了，這次的改動沒有寫進去。請先匯出備份，再刪掉用不到的專案。";
+  document.getElementById("savedText").textContent = "存檔失敗";
+  if(quotaWarned) return;
+  quotaWarned = true;
+  alert("存檔失敗：瀏覽器的儲存空間滿了。\n\n"
+      + "畫面上的內容還在，但沒有寫進瀏覽器 —— 現在關掉分頁就會不見。\n\n"
+      + "請先開「📁 專案 / 範本」按「⬇ 匯出全部專案」把資料存成檔案，再刪掉用不到的專案。");
 }
 
 /* =========================================================
@@ -299,8 +383,10 @@ function findItem(sec, id){ return (sec.items||[]).find(i => i.id === id); }
 /* =========================================================
    計算
    ========================================================= */
+/* 三態：計入（on && !opt）／選配（on && opt）／不計入（!on）。
+   選配是「讓客戶自己勾要不要加」的項目，報價單另列，不進總價。 */
 function itemTotal(it){
-  if(!it.on) return 0;
+  if(!it.on || it.opt) return 0;
   const p = num(it.price), q = num(it.qty), d = num(it.dur);
   switch(it.unit){
     case "day":
@@ -310,6 +396,10 @@ function itemTotal(it){
     case "min":  return p * q * num(S.meta.min);
     default:     return p * q;
   }
+}
+/* 選配項目的金額：itemTotal 對選配一律回 0，這裡單獨算給報價單列表用 */
+function optTotal(it){
+  return itemTotal(Object.assign({}, it, { on:true, opt:false }));
 }
 /* 授權加成的計價基數：拍攝＋後期（不含交通、雜費等代墊性支出） */
 function usageBase(){
@@ -342,8 +432,10 @@ function secTotal(sec, ctx){
   return (sec.pass && S.adj.passFeeOn) ? raw * (1 + num(S.adj.passFee) / 100) : raw;
 }
 function secActual(sec){
+  /* 關掉的區塊在預算側是 0，實際側也要是 0 —— 否則差異會憑空多出一筆超支 */
+  if(!sec.on) return 0;
   if(sec.kind === "revision" || sec.kind === "usage") return 0;
-  return (sec.items||[]).reduce((a,i)=> a + (i.on ? num(i.act) : 0), 0);
+  return (sec.items||[]).reduce((a,i)=> a + ((i.on && !i.opt) ? num(i.act) : 0), 0);
 }
 function compute(){
   const postSec = S.secs.find(s => s.post);
@@ -378,6 +470,52 @@ function compute(){
                        twCalc(base, tax, total));
 }
 
+/* =========================================================
+   目標預算反推
+   客戶先開了預算的時候，由上往下算：填目標總價，把沒鎖定的區塊
+   按同一個比例縮放。授權加成與「依後期百分比」計價的修改費是衍生值，
+   會自己跟著動，所以不直接縮放它們。
+   ========================================================= */
+function scalable(sec){
+  /* 代墊款是實付出去的錢，不能砍；鎖定與關閉的區塊也不動 */
+  return sec.on && !sec.lock && !sec.pass && sec.kind !== "usage";
+}
+/* 拿一份縮放過的複本去算 direct，不動到真正的狀態 */
+function directAtScale(k){
+  const c = JSON.parse(JSON.stringify(S));
+  c.secs.forEach(sec => {
+    if(!scalable(sec)) return;
+    (sec.items||[]).forEach(i => { i.price = num(i.price) * k; });
+    if(sec.kind === "revision") sec.rev.amount = num(sec.rev.amount) * k;
+  });
+  const backup = S; S = c;
+  const d = compute().direct;
+  S = backup;
+  return d;
+}
+/* direct 是縮放係數的線性函數，量兩個點就解得出來，不必推導公式 */
+function solveScale(target){
+  const d0 = directAtScale(0), d1 = directAtScale(1);
+  const a = d1 - d0;
+  if(Math.abs(a) < 1e-6) return null;          /* 沒有東西可以縮放 */
+  const A = S.adj;
+  const M = 1 + (A.rushOn ? num(A.rush) : 0)/100
+              + (A.conOn  ? num(A.con)  : 0)/100
+              + (A.profOn ? num(A.prof) : 0)/100;
+  const T = 1 + (A.taxOn ? num(A.tax) : 0)/100;
+  if(M <= 0 || T <= 0) return null;
+  const needDirect = (target / T + num(A.disc)) / M;
+  return (needDirect - d0) / a;
+}
+function applyScale(k){
+  S.secs.forEach(sec => {
+    if(!scalable(sec)) return;
+    (sec.items||[]).forEach(i => { i.price = Math.round(num(i.price) * k); });
+    if(sec.kind === "revision") sec.rev.amount = Math.round(num(sec.rev.amount) * k);
+  });
+  renderAll(); save();
+}
+
 /* 台灣稅務：算出「客戶付多少 → 你實拿多少」
    公司開發票：營業稅是代收代付，要繳給國稅局，不算收入
    個人接案：被扣 10% 執行業務所得，單筆達門檻再扣 2.11% 二代健保補充保費 */
@@ -402,59 +540,94 @@ function unitOptions(sel){
 }
 
 function rowHTML(sec, it){
+  /* 鎖定的區塊：影響金額的欄位一律關掉。項目名稱與「實際」不在此列 ——
+     前者不影響計價，後者是結案核銷用的。 */
+  const LK = !!sec.lock;
+  const ro = LK ? " readonly" : "";
+  const di = LK ? " disabled" : "";
   const u = UNITS[it.unit] || UNITS.flat;
   let durCell;
   if(u.needDur === "auto"){
     durCell = `<input type="number" class="auto" value="${num(S.meta.min)}" readonly title="自動帶入成品影片長度（分鐘）">`;
   }else if(u.needDur){
-    durCell = `<input type="number" min="0" step="0.5" value="${it.dur}" data-f="dur">`;
+    durCell = `<input type="number" min="0" step="0.5" value="${it.dur}" data-f="dur"${sec.lock?" readonly":""}>`;
   }else{
     durCell = `<span class="na">—</span>`;
   }
   const actCell = S.meta.showAct
     ? `<div class="cell act" data-l="實際"><input type="number" min="0" step="100" value="${num(it.act)}" data-f="act" placeholder="0"></div>`
     : "";
-  return `<div class="row${it.on?"":" off"}${S.meta.showAct?" has-act":""}" data-item="${it.id}">
-    <div><input type="checkbox" data-f="on"${it.on?" checked":""} title="計入／不計入"></div>
+  /* 半日／加班時的單價有計價基準，欄位標籤與 hover 提示都要說清楚 */
+  const pLbl = u.base ? `單價（${u.base}）` : "單價";
+  const pTip = u.base
+    ? ` title="請填${u.base} —— 小計會自動乘上上方設定的${u.coef}" class="based"` : "";
+  const st = !it.on ? "out" : (it.opt ? "opt" : "in");
+  const GLYPH = { in:"✓", opt:"＋", out:"" };
+  const TIP = {
+    in:  "計入總價。點一下改成「選配」",
+    opt: "選配加購：不進總價，報價單另外列一區給客戶勾。點一下改成「不計入」",
+    out: "不計入。點一下改回「計入」"
+  };
+  return `<div class="row${it.on?(it.opt?" opt":""):" off"}${S.meta.showAct?" has-act":""}" data-item="${it.id}">
+    <div class="dragcell"><button class="drag" data-act="drag-item"${di}
+      title="按住拖曳可以調順序，也可以用方向鍵移動" aria-label="拖曳排序，或用上下方向鍵移動"></button></div>
+    <div><button class="tri ${st}" data-act="cycle-state"${di} title="${LK?"這個區塊已鎖定":TIP[st]}" aria-label="${TIP[st]}">${GLYPH[st]}</button></div>
     <div class="cell" data-l="項目"><input type="text" value="${esc(it.name)}" data-f="name" placeholder="項目名稱"></div>
-    <div class="cell" data-l="計價單位"><select data-f="unit">${unitOptions(it.unit)}</select></div>
-    <div class="cell" data-l="單價"><input type="number" min="0" step="100" value="${it.price}" data-f="price"></div>
-    <div class="cell" data-l="數量"><input type="number" min="0" step="1" value="${it.qty}" data-f="qty"></div>
+    <div class="cell" data-l="計價單位"><select data-f="unit"${di}>${unitOptions(it.unit)}</select></div>
+    <div class="cell" data-l="${pLbl}"><input type="number" min="0" step="100" value="${it.price}" data-f="price"${pTip}${ro}></div>
+    <div class="cell" data-l="數量"><input type="number" min="0" step="1" value="${it.qty}" data-f="qty"${ro}></div>
     <div class="cell" data-l="${u.dur === "—" ? "時長" : u.dur}">${durCell}</div>
     <div class="sub" data-sub="${it.id}">${money(itemTotal(it))}</div>
     ${actCell}
-    <div><button class="del" data-act="del-item" title="刪除">×</button></div>
+    <div class="delcell"><button class="del" data-act="del-item" title="刪除" aria-label="刪除"${di}>×</button></div>
   </div>`;
+}
+
+/* 鎖定＝這個區塊的金額不給動：手動改不了，「調整到目標」也不會縮放它。
+   談定的價格就該是談定的價格。 */
+function lockBtnHTML(sec){
+  return `<button class="btn sm ghost${sec.lock?" on":""}" data-act="toggle-lock"
+      title="${sec.lock ? "已鎖定：金額改不了，也不會被「調整到目標」縮放。點一下解鎖"
+                        : "鎖定後這個區塊的金額就改不了，「調整到目標」也會跳過它"}"
+      >${sec.lock?"🔒 已鎖定":"🔓 鎖定金額"}</button>`;
 }
 
 function itemsBody(sec){
   const rows = (sec.items||[]).map(i => rowHTML(sec,i)).join("");
   const A = S.meta.showAct;
-  const syncBtn = sec.sync ? `<button class="btn sm" data-act="sync-days">⇄ 同步拍攝天數</button>` : "";
+  const syncBtn = sec.sync ? `<button class="btn sm" data-act="sync-days"${sec.lock?" disabled":""}>⇄ 同步拍攝天數</button>` : "";
   const hint = sec.post
     ? `<p class="note">「成品分鐘」會自動乘上上方的<b>成品影片長度</b>；例如剪輯 ${money(3000)}／分鐘 × ${num(S.meta.min)} 分鐘。想改成整案固定價，把單位切成「式（整案）」即可。</p>`
     : "";
   const passBtn = `<button class="btn sm ghost${sec.pass?" on":""}" data-act="toggle-pass"
       title="代墊款會另加管理費，並在總覽中分開統計">${sec.pass?"✔ 代墊款":"標記為代墊款"}</button>`;
+  const lockBtn = lockBtnHTML(sec);
+  const tplBtn = `<button class="btn sm ghost" data-act="save-tpl"
+      title="把這個區塊目前的項目與價格存成常用範本，之後在任何專案都能叫回來">⭐ 存成範本</button>`;
+  /* 區塊裡有半日／加班時的項目時，把計價基準寫在看得到的地方 */
+  const used = new Set((sec.items||[]).map(i => i.unit));
+  const bases = Object.keys(UNITS)
+    .filter(k => UNITS[k].base && used.has(k))
+    .map(k => `<b>${UNITS[k].label}</b>的單價請填<b>${UNITS[k].base}</b>，小計會自動套上上方設定的${UNITS[k].coef}`);
+  const baseHint = bases.length ? `<p class="note">${bases.join("；")}。</p>` : "";
   return `<div class="tbl${S.meta.showAct?" with-act":""}">
       <div class="thead">
-        <div></div><div>項目</div><div>計價單位</div><div class="r">單價</div>
+        <div></div><div></div><div>項目</div><div>計價單位</div><div class="r">單價</div>
         <div class="r">數量</div><div class="r">時長</div><div class="r">小計</div>${A?'<div class="r">實際</div>':""}<div></div>
       </div>
       ${rows || `<p class="note">目前沒有項目，點下方「＋ 新增項目」。</p>`}
     </div>
     <div class="sec-actions">
-      <button class="btn sm" data-act="add-item">＋ 新增項目</button>
-      ${syncBtn}${passBtn}
-      <button class="btn sm ghost" data-act="dup-sec" title="複製整個區塊">⧉ 複製區塊</button>
-    </div>${hint}`;
+      <button class="btn sm" data-act="add-item"${sec.lock?" disabled":""}>＋ 新增項目</button>
+      ${syncBtn}${passBtn}${lockBtn}
+      ${tplBtn}<button class="btn sm ghost" data-act="dup-sec" title="複製整個區塊">⧉ 複製區塊</button>
+    </div>${baseHint}${hint}`;
 }
 
-function revBody(sec){
+function revBody(sec, ctx){
   const r = sec.rev;
   const extra = Math.max(0, num(r.total) - num(r.free));
-  const postSec = S.secs.find(s => s.post);
-  const post = postSec ? secTotal(postSec) : 0;
+  const post = (ctx || postCtx()).post;
   const per = r.mode === "pct" ? post * num(r.pct) / 100 : num(r.amount);
   return `<div class="rev-grid">
       <div class="field"><label>合約內免費修改次數</label>
@@ -470,9 +643,10 @@ function revBody(sec){
         ? `<div class="field"><label>每次收取後期費用的</label>
              <input type="number" min="0" step="1" value="${r.pct}" data-rf="pct"><span class="hint">目前後期＝${money(post)}</span></div>`
         : `<div class="field"><label>每次修改費用</label>
-             <input type="number" min="0" step="500" value="${r.amount}" data-rf="amount"></div>` }
+             <input type="number" min="0" step="500" value="${r.amount}" data-rf="amount"${sec.lock?" readonly":""}></div>` }
     </div>
     <div class="formula">超出 <b>${extra}</b> 次 × 每次 <b>${money(per)}</b> ＝ <b>${money(extra*per)}</b></div>
+    <div class="sec-actions">${lockBtnHTML(sec)}</div>
     <p class="note">建議在報價單寫明免費修改次數，超出的部分才有依據收費。大改（重新結構、重拍）通常另計，可在自訂區塊另開一項。</p>`;
 }
 
@@ -492,15 +666,18 @@ function usageBody(sec){
     <p class="note">授權範圍是報價的獨立維度 —— 業界的說法是「以權利計價，不是以工時計價」。同一支片只放官網、投社群廣告、上電視或買斷全媒體，價格可以差好幾倍。基數為<b>拍攝與後期</b>費用（不含交通、雜費與代墊款）。改上面三個選項會帶入建議加成，你也可以直接改「實際加成」覆寫。</p>`;
 }
 
-function secHTML(sec){
-  const t = secTotal(sec, { post: (()=>{ const p = S.secs.find(x=>x.post); return p ? secTotal(p) : 0; })() });
-  const cls = "card sec" + (sec.on ? "" : " off") + (sec.open === false ? " collapsed" : "");
+function secHTML(sec, ctx){
+  ctx = ctx || postCtx();
+  const t = secTotal(sec, ctx);
+  const cls = "card sec" + (sec.on ? "" : " off") + (sec.open === false ? " collapsed" : "")
+            + (sec.lock ? " locked" : "");
   const delBtn = sec.fixed ? "" : `<button class="iconbtn danger no-print" data-act="del-sec" title="刪除此區塊" aria-label="刪除此區塊">🗑</button>`;
-  const tag = sec.pass ? `<span class="tag" title="代墊款：另加管理費，總覽中分開統計">代墊</span>` : "";
+  const tag = (sec.pass ? `<span class="tag" title="代墊款：另加管理費，總覽中分開統計">代墊</span>` : "")
+            + (sec.lock ? `<span class="tag lock" title="已鎖定：不會被「調整到目標」縮放">🔒 鎖定</span>` : "");
   const title = sec.fixed
     ? `<h2 style="flex:1"><span class="ico">${sec.icon}</span>${esc(sec.name)}${tag}</h2>`
     : `<span class="ico">${sec.icon}</span><input class="sec-title" value="${esc(sec.name)}" data-act="ren-sec">${tag}`;
-  const body = sec.kind === "revision" ? revBody(sec)
+  const body = sec.kind === "revision" ? revBody(sec, ctx)
              : sec.kind === "usage"    ? usageBody(sec)
              : itemsBody(sec);
   return `<section class="${cls}" data-sec="${sec.id}">
@@ -515,8 +692,14 @@ function secHTML(sec){
   </section>`;
 }
 
+/* 後期區塊的總額：修改費以百分比計價時要用，算一次傳下去就好 */
+function postCtx(){
+  const p = S.secs.find(x => x.post);
+  return { post: p ? secTotal(p) : 0 };
+}
 function renderSections(){
-  $("#sections").innerHTML = S.secs.map(secHTML).join("");
+  const ctx = postCtx();
+  $("#sections").innerHTML = S.secs.map(s => secHTML(s, ctx)).join("");
 }
 
 /* =========================================================
@@ -529,12 +712,14 @@ const REDUCED = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const CNT = new WeakMap();          /* 數字跑動的狀態：目前值與 rAF id */
 
 function countTo(el, target, fmt){
-  const st = CNT.get(el) || { cur: null, raf: 0 };
+  const st = CNT.get(el) || { cur: null, raf: 0, fb: 0 };
   if(st.raf) cancelAnimationFrame(st.raf);
+  if(st.fb)  clearTimeout(st.fb);
+  st.raf = 0; st.fb = 0;
   /* 第一次繪製、關閉動畫偏好、差距太小，或分頁在背景（rAF 會被凍結，
      數字會卡在舊值）都直接寫上去，不跑動畫 */
   if(st.cur === null || REDUCED || document.hidden || Math.abs(target - st.cur) < 1){
-    st.cur = target; st.raf = 0; CNT.set(el, st);
+    st.cur = target; CNT.set(el, st);
     el.textContent = fmt(target); return;
   }
   const from = st.cur, t0 = performance.now(), dur = 420;
@@ -544,10 +729,19 @@ function countTo(el, target, fmt){
     st.cur = from + (target - from) * e;
     el.textContent = fmt(k < 1 ? st.cur : target);
     st.raf = k < 1 ? requestAnimationFrame(step) : 0;
-    if(k >= 1) st.cur = target;
+    if(k >= 1){ st.cur = target; if(st.fb){ clearTimeout(st.fb); st.fb = 0; } }
     CNT.set(el, st);
   };
   st.raf = requestAnimationFrame(step);
+  /* 保底：動畫跑到一半分頁被切走的話 rAF 會整個凍結，數字就永遠卡在中間值 ——
+     總計卡住等於畫面上擺著一個錯的金額。setTimeout 會被節流但不會停，
+     用它確保最終數字一定寫得上去。 */
+  st.fb = setTimeout(()=>{
+    if(st.raf){ cancelAnimationFrame(st.raf); st.raf = 0; }
+    st.fb = 0; st.cur = target;
+    el.textContent = fmt(target);
+    CNT.set(el, st);
+  }, dur + 150);
   CNT.set(el, st);
 }
 
@@ -623,7 +817,11 @@ function renderSummary(){
   setLine("r_disc", "折扣",                                -c.disc, c.disc > 0);
   setLine("r_tax",  `稅金 ${num(S.adj.tax)}%`,             c.tax,  S.adj.taxOn && c.tax > 0);
 
-  $("#t_total").textContent = money(c.total);
+  renderTarget(c);
+  /* 側欄最重要的那個數字，跟成本分佈用同一套跑動 */
+  countTo($("#t_total"), c.total, money);
+  countTo($("#mini_total"), c.total, money);
+  countTo($("#mini_direct"), c.direct, v => "直接成本 " + money(v));
   $("#k_min").textContent   = num(S.meta.min)  > 0 ? money(c.total / num(S.meta.min))  : "—";
   $("#k_day").textContent   = num(S.meta.days) > 0 ? money(c.total / num(S.meta.days)) : "—";
   $("#k_shoot").textContent = money(c.shoot);
@@ -649,7 +847,32 @@ function renderSummary(){
   }
 
   renderTwLines(c);
-  updatePayHint();
+  updatePayHint(c);
+}
+
+/* 目標預算：側欄的差額行，與卡片裡那段比較長的說明 */
+function renderTarget(c){
+  const tg = num(S.meta.target);
+  const box = $("#targetBox");
+  box.style.display = tg > 0 ? "" : "none";
+  if(tg > 0){
+    $("#t_target").textContent = money(tg);
+    const gap = tg - c.total, el = $("#t_gap");
+    el.textContent = (gap >= 0 ? "還可以加 " : "超出 ") + money(Math.abs(gap));
+    el.style.color = gap >= 0 ? "var(--green)" : "var(--red)";
+  }
+  const hint = $("#targetHint");
+  if(!hint) return;
+  if(tg <= 0){ hint.innerHTML = ""; hint.style.display = "none"; return; }
+  hint.style.display = "";
+  const held = S.secs.filter(s => s.on && (s.lock || s.pass)).map(s => s.name);
+  const heldTxt = held.length ? `<br>不會被調整的區塊：${esc(held.join("、"))}。` : "";
+  const gap = tg - c.total;
+  hint.innerHTML = Math.abs(gap) < 1
+    ? `目前總計 <b style="color:var(--green)">${money(c.total)}</b>，剛好落在目標上。${heldTxt}`
+    : `目前總計 <b style="color:var(--accent)">${money(c.total)}</b>，目標 <b>${money(tg)}</b> —— `
+      + (gap > 0 ? `還可以加 <b style="color:var(--green)">${money(gap)}</b>。`
+                 : `已超出 <b style="color:var(--red)">${money(-gap)}</b>。`) + heldTxt;
 }
 
 /* 讓「客戶／單位 → 合約甲方」的關係在畫面上看得見：
@@ -741,7 +964,7 @@ function renderAll(){ renderSections(); renderSummary(); }
    ========================================================= */
 const METAF = {m_project:"project", m_client:"client", m_date:"date", m_cur:"cur",
                m_days:"days", m_hours:"hours", m_min:"min", m_note:"note",
-               m_halfRate:"halfRate", m_otRate:"otRate"};
+               m_halfRate:"halfRate", m_otRate:"otRate", m_target:"target"};
 const ADJF  = {a_conOn:"conOn", a_con:"con", a_profOn:"profOn", a_prof:"prof",
                a_taxOn:"taxOn", a_tax:"tax", a_disc:"disc",
                a_rushOn:"rushOn", a_rush:"rush", a_passFeeOn:"passFeeOn", a_passFee:"passFee"};
@@ -776,6 +999,7 @@ function bindForms(){
       S.meta[k] = (e.target.type === "number") ? num(e.target.value) : e.target.value;
       if(k === "client") syncClientHint();
       if(k === "cur" || k === "min" || k === "days" || k === "hours") refresh();
+      else if(k === "target"){ renderSummary(); save(); }
       else save();
     });
   });
@@ -797,6 +1021,7 @@ function bindForms(){
                     : el.type === "number"   ? num(el.value)
                     : el.value;
       if(k === "aName") syncClientHint();
+      if(PROFILE_KEYS.indexOf(k) >= 0) saveProfile();   /* 乙方與慣用條款跨專案共用 */
       updatePayHint(); save();
     });
   });
@@ -823,8 +1048,9 @@ document.addEventListener("input", e => {
     const it  = findItem(sec, row.dataset.item);
     const f   = e.target.dataset.f;
     if(!it || !f) return;
+    /* 鎖定的區塊只放行不影響金額的欄位 */
+    if(sec.lock && f !== "name" && f !== "act") return;
     if(f === "name") it.name = e.target.value;
-    else if(f === "on"){ it.on = e.target.checked; row.classList.toggle("off", !it.on); }
     else it[f] = num(e.target.value);
     refresh();
     return;
@@ -832,6 +1058,7 @@ document.addEventListener("input", e => {
   const rf = e.target.dataset.rf;
   if(rf){
     const sec = findSec(e.target.closest("[data-sec]").dataset.sec);
+    if(sec.lock) return;
     sec.rev[rf] = (rf === "mode") ? e.target.value : num(e.target.value);
     refresh();
     return;
@@ -853,10 +1080,12 @@ document.addEventListener("change", e => {
     const row = e.target.closest("[data-item]");
     const sec = findSec(row.closest("[data-sec]").dataset.sec);
     const it  = findItem(sec, row.dataset.item);
+    if(sec.lock){ $(`[data-sec="${sec.id}"] .sec-body`).innerHTML = itemsBody(sec); return; }
     it.unit = e.target.value;
     if(it.unit === "day")  it.dur = num(S.meta.days)  || 1;
     if(it.unit === "hour") it.dur = num(S.meta.hours) || 1;
-    row.outerHTML = rowHTML(sec, it);
+    /* 重繪整個區塊而不只是這一列：計價基準的說明要跟著單位一起出現或消失 */
+    $(`[data-sec="${sec.id}"] .sec-body`).innerHTML = itemsBody(sec);
     refresh();
   }
   if(e.target.dataset.rf === "mode"){
@@ -882,6 +1111,13 @@ document.addEventListener("click", e => {
   const secEl = btn.closest("[data-sec]");
   const sec = secEl ? findSec(secEl.dataset.sec) : null;
 
+  /* 鎖定的區塊擋掉所有會改變金額的動作 —— 必須放在各分支之前，
+     否則 add-item 這類排在前面的 handler 會先跑掉。
+     解鎖、排序、收合、複製、刪除整個區塊不在此列。 */
+  if(sec && sec.lock && ["cycle-state","add-item","del-item","sync-days"].indexOf(act) >= 0){
+    alert(`「${sec.name}」已鎖定，金額改不了。\n\n要調整請先按「🔒 已鎖定」解鎖。`);
+    return;
+  }
   if(act === "toggle-sec"){
     sec.on = btn.checked; secEl.classList.toggle("off", !sec.on); refresh(); return;
   }
@@ -909,13 +1145,30 @@ document.addEventListener("click", e => {
     if(last) last.querySelector('input[type=text]').focus();
     refresh(); return;
   }
+  if(act === "cycle-state"){
+    const row = btn.closest("[data-item]");
+    const it = findItem(sec, row.dataset.item);
+    if(!it) return;
+    if(it.on && !it.opt)      { it.opt = true; }          /* 計入 → 選配 */
+    else if(it.on && it.opt)  { it.on = false; it.opt = false; }  /* 選配 → 不計入 */
+    else                      { it.on = true;  it.opt = false; }  /* 不計入 → 計入 */
+    $(`[data-sec="${sec.id}"] .sec-body`).innerHTML = itemsBody(sec);
+    refresh(); return;
+  }
   if(act === "del-item"){
     const row = btn.closest("[data-item]");
     sec.items = sec.items.filter(i => i.id !== row.dataset.item);
-    row.remove(); refresh(); return;
+    /* 重繪整個區塊而非只移除該列：首末列的上下箭頭要重新判斷停用 */
+    $(`[data-sec="${sec.id}"] .sec-body`).innerHTML = itemsBody(sec);
+    refresh(); return;
   }
   if(act === "toggle-pass"){
     sec.pass = !sec.pass;
+    renderAll(); save(); return;
+  }
+  if(act === "toggle-lock"){
+    /* 標題的鎖頭標記在 card-head，所以要整份重繪，跟代墊款的處理一致 */
+    sec.lock = !sec.lock;
     renderAll(); save(); return;
   }
   if(act === "sync-days"){
@@ -933,7 +1186,11 @@ document.addEventListener("click", e => {
   /* --- 專案面板 --- */
   if(act === "use-preset"){
     const p = PRESETS[+btn.dataset.i];
-    if(!confirm(`套用「${p.name}」範本？\n\n目前的預算項目會被取代（客戶資料、合約設定與各項加成會保留）。`)) return;
+    const custom = S.secs.filter(x => !x.fixed).map(x => x.name);
+    const warn = custom.length
+      ? `\n\n⚠ 這些自訂區塊會一起被刪除：\n・${custom.join("\n・")}`
+      : "";
+    if(!confirm(`套用「${p.name}」範本？\n\n目前的預算項目會被取代（客戶資料、合約設定、稅務與各項加成都會保留）。${warn}`)) return;
     applyPreset(p); closePanel(); return;
   }
   if(act === "new-proj"){
@@ -967,13 +1224,170 @@ document.addEventListener("click", e => {
     $("#panelBody").innerHTML = panelHTML(); return;
   }
 
+  if(act === "fit-target"){
+    const tg = num(S.meta.target);
+    if(tg <= 0){ alert("請先在上面填「目標總價」。"); return; }
+    const k = solveScale(tg);
+    if(k === null){
+      alert("沒有可以調整的區塊 —— 目前所有區塊都被鎖定、標為代墊款，或是關掉了。"); return;
+    }
+    if(k <= 0){
+      alert(`目標訂得太低了。\n\n就算把沒鎖定的區塊全部歸零，總計還是會高於 ${money(tg)}\n（鎖定與代墊款的區塊撐住了下限）。\n\n請放寬目標，或解鎖／關掉一些區塊。`);
+      return;
+    }
+    const before = compute().total;
+    if(!confirm(
+      `把沒鎖定的區塊單價都乘上 ${(k*100).toFixed(1)}%。\n\n`
+      + `目前 ${money(before)}\n目標 ${money(tg)}\n\n`
+      + `單價會四捨五入到整數，結果可能差個幾塊。確定嗎？`)) return;
+    applyScale(k);
+    const after = compute().total, d = Math.abs(after - tg);
+    alert(d < 1 ? `調整完成，總計 ${money(after)}。`
+                : `調整完成，總計 ${money(after)}。\n與目標差 ${money(d)}，是單價四捨五入造成的。`);
+    return;
+  }
+
+  if(act === "convert-amounts"){
+    const raw = prompt(
+      "把目前所有金額乘上一個倍率。\n\n"
+      + "台幣換美金（1 US$ ≒ 32 NT$）：0.031\n"
+      + "美金換回台幣：32\n"
+      + "整份調漲一成：1.1\n\n"
+      + "倍率：", "1");
+    if(raw === null) return;
+    const k = parseFloat(raw);
+    if(!isFinite(k) || k <= 0){ alert("倍率要填大於 0 的數字。"); return; }
+    if(Math.abs(k - 1) < 1e-9) return;
+    const t0 = compute().total;
+    if(!confirm(
+      `所有單價、折扣、每次修改費用與「實際」金額都會乘上 ${k}。\n`
+      + `百分比類的設定（各項加成、稅率、授權比例）不受影響。\n\n`
+      + `目前總計 ${money(t0)}\n換算後約 ${money(t0 * k)}\n\n`
+      + `這個動作沒辦法復原，確定嗎？`)) return;
+    convertAmounts(k);
+    return;
+  }
+
+  if(act === "share-link"){
+    if(!CAN_SHARE){
+      alert("這個瀏覽器版本還不支援連結壓縮。\n請改用「⬇ JSON」把檔案傳給對方。"); return;
+    }
+    const cp = curProject(); if(cp) cp.data = S;
+    encodeShare(S).then(code => {
+      const url = shareBase() + "#s=" + code;
+      if(url.length > 8000){
+        alert(`這個專案太大了，產生的連結有 ${url.length} 個字元。\n`
+            + `通訊軟體與部分伺服器會把它截斷，開不起來。\n\n請改用「⬇ JSON」傳檔案。`);
+        return;
+      }
+      lastShareUrl = url;
+      $("#panelBody").innerHTML = panelHTML();
+      const el = $("#shareUrl"); if(el) el.select();
+    }).catch(()=> alert("產生連結失敗。"));
+    return;
+  }
+  if(act === "copy-share"){
+    const el = $("#shareUrl"); if(!el) return;
+    el.select();
+    const ok = () => { btn.textContent = "✓ 已複製"; setTimeout(()=>{ btn.textContent = "📋 複製"; }, 1600); };
+    if(navigator.clipboard) navigator.clipboard.writeText(el.value).then(ok, ()=>{ document.execCommand("copy"); ok(); });
+    else { document.execCommand("copy"); ok(); }
+    return;
+  }
+  if(act === "keep-shared"){
+    sharedMode = false;
+    addProject((S.meta.project || "分享的專案").trim() || "分享的專案", S);
+    try{ history.replaceState(null, "", shareBase()); }catch(e){}
+    $("#sharedBar").hidden = true;
+    $("#savedText").textContent = "自動儲存";
+    save();
+    alert("已存成你的專案，之後的改動都會自動儲存。");
+    return;
+  }
+  if(act === "drop-shared"){ location.href = shareBase(); return; }
+
+  if(act === "toggle-cmp"){
+    panelCmp = !panelCmp;
+    $("#panelBody").innerHTML = panelHTML(); return;
+  }
+  if(act === "export-all"){ exportAll(); return; }
+  if(act === "import-any"){ $("#fileIn").click(); return; }
+
+  if(act === "clear-profile"){
+    if(!confirm("清除記住的「乙方資料與慣用條款」？\n\n目前這個專案已經填好的內容不受影響，只是之後開新專案不再自動帶入。")) return;
+    try{ localStorage.removeItem(PKEY); }catch(e){}
+    alert("已清除。這個專案的內容還在，要一起清掉請用「↺ 重設」。");
+    return;
+  }
+
+  if(act === "save-tpl"){
+    const items = (sec.items||[]).filter(i => String(i.name).trim());
+    if(!items.length){ alert("這個區塊還沒有填名字的項目，存不了範本。"); return; }
+    const dflt = String(sec.name || "我的範本").replace(/（複本）$/, "");
+    const raw = prompt(
+      "範本名稱：\n\n"
+      + `目前的 ${items.length} 個項目（名稱、計價單位、單價、數量）會存起來，\n`
+      + "所有專案共用，之後在「新增自訂區塊」那一區一鍵帶回來。", dflt);
+    if(raw === null) return;
+    const nm = raw.trim() || dflt;
+    const list = loadMyTpl();
+    const at = list.findIndex(t => t.name === nm);
+    if(at >= 0 && !confirm(`已經有一個叫「${nm}」的範本，要覆蓋掉嗎？`)) return;
+    const rec = { name:nm, icon:sec.icon || "📌",
+                  items:items.map(i => [i.name, i.unit, num(i.price), num(i.qty), num(i.dur)]) };
+    if(at >= 0) list[at] = rec; else list.push(rec);
+    if(!saveMyTpl(list)){ alert("存不進去 —— 瀏覽器的儲存空間可能滿了。"); return; }
+    renderChips();
+    alert(`已存成範本「${nm}」，共 ${rec.items.length} 個項目。`);
+    return;
+  }
+  if(act === "add-mytpl"){
+    const t = loadMyTpl()[+btn.dataset.i]; if(!t) return;
+    addSection(t.name, t.icon, (t.items||[]).map(a =>
+      item(a[0], a[1], a[2], a[3] == null ? 1 : a[3], a[4] == null ? 1 : a[4])));
+    return;
+  }
+  if(act === "del-mytpl"){
+    const list = loadMyTpl(), t = list[+btn.dataset.i]; if(!t) return;
+    if(!confirm(`刪掉常用範本「${t.name}」？\n\n只是刪掉這個範本，已經加進專案的區塊不受影響。`)) return;
+    list.splice(+btn.dataset.i, 1);
+    saveMyTpl(list); renderChips(); return;
+  }
+
   if(act === "add-blank-sec"){ addSection("自訂區塊", "📦", []); return; }
   if(act === "add-tpl"){
     const t = TEMPLATES[+btn.dataset.i];
-    addSection(t.name, t.icon, t.items.map(a => item(a[0], a[1], a[2], a[1]==="person"?1:1, a[1]==="day"?(num(S.meta.days)||1):1)));
+    addSection(t.name, t.icon, t.items.map(a =>
+      item(a[0], a[1], a[2], a[3] == null ? 1 : a[3], a[1]==="day" ? (num(S.meta.days)||1) : 1)));
     return;
   }
 });
+
+/* 幣別下拉只換顯示符號、不動數字，真要換算得明確按這裡。
+   也可以拿來整份調漲或打折。百分比類的設定不在換算範圍內。 */
+function convertAmounts(k){
+  const r = v => Math.round(num(v) * k);
+  S.secs.forEach(sec => {
+    (sec.items||[]).forEach(i => { i.price = r(i.price); i.act = r(i.act); });
+    if(sec.kind === "revision") sec.rev.amount = r(sec.rev.amount);
+  });
+  S.adj.disc = r(S.adj.disc);
+  if(num(S.meta.target) > 0) S.meta.target = r(S.meta.target);
+  fillForm(); renderAll(); save();
+}
+
+/* 內建範本 ＋ 自己存的範本 */
+function renderChips(){
+  const mine = loadMyTpl();
+  const built = TEMPLATES.map((t,i)=>
+    `<button class="chip" data-act="add-tpl" data-i="${i}">${t.icon} ${esc(t.name)}</button>`).join("");
+  const my = mine.map((t,i)=>
+    `<span class="chip my"><button class="chipmain" data-act="add-mytpl" data-i="${i}">${t.icon} ${esc(t.name)}</button>`
+    + `<button class="chipx" data-act="del-mytpl" data-i="${i}" title="刪掉這個範本" aria-label="刪掉範本">×</button></span>`).join("");
+  $("#tplChips").innerHTML = built + my;
+  const note = $("#myTplNote");
+  if(note) note.style.display = mine.length ? "" : "none";
+}
 
 function addSection(name, icon, items){
   S.secs.push({ id:nid(), kind:"items", icon, name, on:true, open:true, fixed:false, items });
@@ -992,10 +1406,12 @@ function applyPreset(p){
   /* 客戶、合約、稅務與各項加成設定都保留，只換預算結構 */
   S.meta = Object.assign(base.meta, {
     project:S.meta.project, client:S.meta.client, date:S.meta.date, cur:S.meta.cur,
-    note:S.meta.note, halfRate:S.meta.halfRate, otRate:S.meta.otRate, showAct:S.meta.showAct
+    note:S.meta.note, halfRate:S.meta.halfRate, otRate:S.meta.otRate,
+    showAct:S.meta.showAct, target:S.meta.target
   }, p.meta);
 
   const secs = [];
+  const cw = g("crew");   cw.items = mk(p.crew || []); secs.push(cw);
   (p.add||[]).forEach(a => secs.push({ id:nid(), kind:"items", icon:a.icon, name:a.name,
                                        on:true, open:true, fixed:false, pass:false, items:mk(a.items) }));
   const eq = g("equip");  eq.items = mk(p.equip);   secs.push(eq);
@@ -1012,6 +1428,60 @@ function applyPreset(p){
 /* =========================================================
    專案面板（存檔管理 ＋ 範本）
    ========================================================= */
+/* 拿一個專案的總覽數字：compute() 讀的是全域 S，暫時換過去算完再還原 */
+const moneyIn = (cur, v) => cur + " " + nf.format(Math.round(v || 0));
+function projectStat(p){
+  const backup = S;
+  S = migrate(p.data);                       /* 順手把舊存檔的欄位補齊 */
+  const c = compute();
+  const stat = {
+    name: p.name, cur: S.meta.cur,
+    total: c.total, direct: c.direct,
+    days: num(S.meta.days), min: num(S.meta.min),
+    twNet: S.tw.on ? c.twNet : null,
+    secs: S.secs.map(x => ({ name:x.name, icon:x.icon, v:c.per[x.id]||0, on:x.on }))
+  };
+  S = backup;
+  return stat;
+}
+
+/* 方案 A／B／C 並排。客戶問「有沒有便宜一點的版本」時要看的就是這個。 */
+function compareHTML(){
+  if(STORE.projects.length < 2){
+    return `<p class="note">目前只有一個專案。用上面的「⧉ 複製」做一份改成另一個方案，就能在這裡並排比較。</p>`;
+  }
+  const stats = STORE.projects.map(projectStat);
+  /* 區塊以名稱對齊 —— 不同專案的自訂區塊 id 不同，但名字通常一致 */
+  const keys = [];
+  stats.forEach(st => st.secs.forEach(x => {
+    if(!keys.some(k => k.name === x.name)) keys.push({ name:x.name, icon:x.icon });
+  }));
+  const min = Math.min.apply(null, stats.map(x => x.total));
+  const cells = fn => stats.map(fn).join("");
+
+  const secRows = keys.map(k => `<tr><td>${k.icon||""} ${esc(k.name)}</td>${
+    cells(st => {
+      const x = st.secs.find(y => y.name === k.name);
+      return `<td class="r">${!x ? '<span class="cmp-na">—</span>'
+                             : x.on ? moneyIn(st.cur, x.v)
+                             : '<span class="cmp-na">關閉</span>'}</td>`;
+    })}</tr>`).join("");
+
+  return `<div class="cmp-wrap"><table class="cmp">
+    <tr><th>區塊</th>${cells(st => `<th class="r">${esc(st.name)}</th>`)}</tr>
+    ${secRows}
+    <tr class="cmp-sum"><td>直接成本</td>${cells(st => `<td class="r">${moneyIn(st.cur, st.direct)}</td>`)}</tr>
+    <tr class="cmp-total"><td>總計</td>${cells(st =>
+      `<td class="r">${moneyIn(st.cur, st.total)}${st.total === min ? ' <span class="cmp-tag">最低</span>' : ""}</td>`)}</tr>
+    ${stats.some(x => x.twNet !== null)
+      ? `<tr><td>你實拿</td>${cells(st => `<td class="r">${st.twNet === null ? "—" : moneyIn(st.cur, st.twNet)}</td>`)}</tr>`
+      : ""}
+    <tr class="cmp-meta"><td>拍攝天數 ／ 成品長度</td>${cells(st =>
+      `<td class="r">${st.days} 天 ／ ${st.min} 分</td>`)}</tr>
+  </table></div>`;
+}
+
+let panelCmp = false;
 function panelHTML(){
   const cards = PRESETS.map((p,i) =>
     `<button class="pcard" data-act="use-preset" data-i="${i}">
@@ -1033,7 +1503,21 @@ function panelHTML(){
     <div class="plist">${rows}</div>
     <div class="sec-actions" style="border-top:none;padding-top:10px">
       <button class="btn" data-act="new-proj">＋ 開新的空白專案</button>
+      <button class="btn ghost" data-act="export-all">⬇ 匯出全部專案</button>
+      <button class="btn ghost" data-act="import-any">⬆ 匯入</button>
+      <button class="btn ghost${panelCmp?" on":""}" data-act="toggle-cmp">⇄ ${panelCmp?"收起比較":"並排比較"}</button>
+      <button class="btn ghost" data-act="share-link">🔗 產生分享連結</button>
     </div>
+    ${lastShareUrl ? `<div class="sharebox">
+      <label>分享連結（${lastShareUrl.length} 字元）</label>
+      <div class="sharerow">
+        <input type="text" id="shareUrl" readonly value="${esc(lastShareUrl)}">
+        <button class="btn sm primary" data-act="copy-share">📋 複製</button>
+      </div>
+      <p class="note" style="margin-top:8px">連結本身就是資料，<b>沒有經過任何伺服器</b>。對方打開會看到這份試算，並自行決定要不要存進他的專案庫。連結很長是正常的。</p>
+    </div>` : ""}
+    ${panelCmp ? compareHTML() : ""}
+    <p class="note" style="margin-top:8px">「匯出全部專案」存的是整個專案庫，換電腦時一個檔案就還原得完；工具列的「⬇ JSON」只存目前這一個。匯入會自動判斷檔案裡是單一專案還是整個專案庫，<b>一律用新增的方式加進來</b>，現有專案不會被蓋掉。</p>
     <h3 class="grp">套用專案類型範本</h3>
     <p class="note" style="margin-top:0">一鍵換掉整份預算結構與參考價格。<b>客戶資料、合約設定、稅務與各項加成都會保留</b>，只有預算項目會被取代。</p>
     <div class="pgrid">${cards}</div>`;
@@ -1130,7 +1614,7 @@ function serviceTable(force){
     if(s.kind === "revision"){
       detail = `含 ${num(s.rev.free)} 次修改，超出部分依第五條辦理`;
     }else{
-      const names = (s.items||[]).filter(x => x.on && String(x.name).trim())
+      const names = (s.items||[]).filter(x => x.on && !x.opt && String(x.name).trim())
                                  .map(x => String(x.name).trim());
       detail = names.join("、") || "—";
     }
@@ -1145,6 +1629,32 @@ function serviceTable(force){
     ${rows || `<tr><td colspan="${show?4:3}">—</td></tr>`}
     ${foot}
   </table>`;
+}
+
+/* 選配加購：不進報價總額，另列一區讓客戶自己勾 */
+function optionTable(){
+  const rows = []; let sum = 0;
+  S.secs.forEach(sec => {
+    if(!sec.on) return;
+    (sec.items||[]).forEach(i => {
+      if(!i.on || !i.opt || !String(i.name).trim()) return;
+      const v = optTotal(i); sum += v;
+      const u = UNITS[i.unit] || UNITS.flat;
+      const spec = u.needDur === "auto" ? `${num(S.meta.min)} ${u.label}`
+                 : u.needDur            ? `${num(i.qty)} × ${num(i.dur)} ${u.label}`
+                 :                        `${num(i.qty)} ${u.label}`;
+      rows.push(`<tr><td style="width:9em">${esc(sec.name)}</td><td>${esc(i.name)}</td>`
+        + `<td style="width:7.5em">${spec}</td><td class="r">${money(v)}</td>`
+        + `<td style="width:4em;text-align:center">□</td></tr>`);
+    });
+  });
+  if(!rows.length) return "";
+  return `<table>
+    <tr><th>所屬區塊</th><th>項目</th><th>數量</th><th class="r">金額</th><th style="text-align:center">加購</th></tr>
+    ${rows.join("")}
+    <tr><th colspan="3" class="r">全部加購合計</th><th class="r">${money(sum)}</th><th></th></tr>
+  </table>
+  <p>以上為選配項目，<b>未計入前述報價總額</b>。需要哪幾項請在右欄打勾，確認後另行計價併入合約。</p>`;
 }
 
 const COPYRIGHT_TEXT = {
@@ -1304,6 +1814,10 @@ function quoteHTML(){
   const revSec = S.secs.find(s => s.kind === "revision");
   const free = (revSec && revSec.on) ? num(revSec.rev.free) : 0;
   const excl = String(c.exclude||"").split("\n").map(s=>s.trim()).filter(Boolean);
+  const optTable = optionTable();
+  /* 節次自動編號：選配區可有可無，硬編號會跳號 */
+  const CN = ["一","二","三","四","五","六","七","八","九"];
+  let qn = 0; const Q = () => CN[qn++];
 
   const line = (label, val, strong) => val
     ? `<tr><td colspan="3" class="r"${strong?' style="font-weight:700"':""}>${label}</td>
@@ -1323,7 +1837,7 @@ function quoteHTML(){
     <tr><th>報價日期</th><td>${dstr(m.date)}　　有效期限：<b>${valid}</b>（逾期價格得重新評估）</td></tr>
   </table>
 
-  <h3>一、專案內容</h3>
+  <h3>${Q()}、專案內容</h3>
   <ol>
     <li>專案名稱：${val(m.project)}</li>
     <li>影片規格：${val(c.spec)}</li>
@@ -1331,7 +1845,7 @@ function quoteHTML(){
     <li>交付項目：${val(c.deliver)}</li>
   </ol>
 
-  <h3>二、費用明細</h3>
+  <h3>${Q()}、費用明細</h3>
   ${serviceTable(true)}
   <table>
     ${line(`趕件加成 ${num(S.adj.rush)}%`, S.adj.rushOn ? r.rush : 0)}
@@ -1343,7 +1857,9 @@ function quoteHTML(){
   </table>
   <p><b>合計：${amtFull(r.total)}</b>${S.adj.taxOn ? "（含營業稅）" : "（未含營業稅）"}</p>
 
-  <h3>三、付款方式</h3>
+  ${optTable ? `<h3>${Q()}、選配加購（可自由增減）</h3>${optTable}` : ""}
+
+  <h3>${Q()}、付款方式</h3>
   <ol>
     <li>簽約訂金：${num(c.pay1)}%，計 ${money(plan.amt[0])}</li>
     ${num(c.pay2) > 0 ? `<li>期中款（初剪交付後）：${num(c.pay2)}%，計 ${money(plan.amt[1])}</li>` : ""}
@@ -1351,16 +1867,16 @@ function quoteHTML(){
     <li>各期款項於請款後 ${num(c.payDays)} 日內支付。</li>
   </ol>
 
-  <h3>四、期程與修改</h3>
+  <h3>${Q()}、期程與修改</h3>
   <ol>
     <li>拍攝日：${dstr(c.shootDate)}　｜　初剪交付：${dstr(c.cutDate)}　｜　完成交付：${dstr(c.finalDate)}</li>
     <li>本報價含 <b>${free}</b> 次修改，超出部分另行計費。</li>
     <li>甲方應於 ${num(c.acceptDays)} 日內回覆審核意見或完成驗收，逾期視為通過。</li>
   </ol>
 
-  ${excl.length ? `<h3>五、本報價不含</h3><ol>${excl.map(x=>`<li>${esc(x)}</li>`).join("")}</ol>` : ""}
+  ${excl.length ? `<h3>${Q()}、本報價不含</h3><ol>${excl.map(x=>`<li>${esc(x)}</li>`).join("")}</ol>` : ""}
 
-  ${m.note ? `<h3>${excl.length ? "六" : "五"}、備註</h3><p>${esc(m.note).replace(/\n/g,"<br>")}</p>` : ""}
+  ${m.note ? `<h3>${Q()}、備註</h3><p>${esc(m.note).replace(/\n/g,"<br>")}</p>` : ""}
 
   <table class="signt"><tr>
     <td><h4>客戶確認</h4>
@@ -1420,6 +1936,7 @@ document.addEventListener("keydown", e => {
   if(barMenus.some(m => m.menu.classList.contains("open"))){ closeBarMenus(); return; }
   if(!$("#contractModal").hidden) closeContract();
   else if(!$("#panelModal").hidden) closePanel();
+  else if(document.body.classList.contains("sheet-open")) closeSheet();
 });
 
 $("#cWord").addEventListener("click", ()=>{
@@ -1471,9 +1988,10 @@ $("#cCopy").addEventListener("click", async ()=>{
   setTimeout(()=>{ btn.textContent = old; }, 1600);
 });
 
-function updatePayHint(){
+function updatePayHint(r){
   const c = S.contract, sum = num(c.pay1) + num(c.pay2) + num(c.pay3);
-  const r = compute(), plan = payPlan(r.total);
+  r = r || compute();                      /* 由 renderSummary 呼叫時直接沿用算好的 */
+  const plan = payPlan(r.total);
   const el = $("#payHint");
   const parts = [`訂金 ${money(plan.amt[0])}`];
   if(num(c.pay2) > 0) parts.push(`期中 ${money(plan.amt[1])}`);
@@ -1538,7 +2056,7 @@ $("#btnCsv").addEventListener("click", ()=>{
       const dur = u.needDur === "auto" ? S.meta.min : (u.needDur ? i.dur : "");
       L.push([sec.name, i.name, u.label, i.price, i.qty, dur, Math.round(itemTotal(i))]
               .concat(A?[Math.round(num(i.act))]:[])
-              .concat([i.on?"是":"否", p]).map(q).join(","));
+              .concat([i.on ? (i.opt ? "選配" : "是") : "否", p]).map(q).join(","));
     });
   });
   L.push("");
@@ -1566,6 +2084,49 @@ function dl(text, filename, mime){
   setTimeout(()=>URL.revokeObjectURL(url), 1000);
 }
 
+/* =========================================================
+   分享連結
+   把專案壓進 URL hash。連結本身就是資料，不經過任何伺服器 ——
+   跟「資料只存在你的瀏覽器」這條原則一致。
+   ========================================================= */
+const CAN_SHARE = typeof CompressionStream === "function";
+let sharedMode = false;      /* 正在看別人分享的內容，先不要碰使用者自己的存檔 */
+let lastShareUrl = "";
+
+function shareBase(){
+  return location.protocol === "file:"
+    ? location.href.split("#")[0]
+    : location.origin + location.pathname;
+}
+async function encodeShare(obj){
+  const bytes = new TextEncoder().encode(JSON.stringify(obj));
+  const cs = new CompressionStream("gzip");
+  const w = cs.writable.getWriter(); w.write(bytes); w.close();
+  const buf = await new Response(cs.readable).arrayBuffer();
+  let bin = ""; new Uint8Array(buf).forEach(b => bin += String.fromCharCode(b));
+  return btoa(bin).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+}
+async function decodeShare(code){
+  const bin = atob(code.replace(/-/g,"+").replace(/_/g,"/"));
+  const bytes = new Uint8Array(bin.length);
+  for(let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const ds = new DecompressionStream("gzip");
+  const w = ds.writable.getWriter(); w.write(bytes); w.close();
+  const buf = await new Response(ds.readable).arrayBuffer();
+  return JSON.parse(new TextDecoder().decode(buf));
+}
+
+/* 整個專案庫一個檔案：換電腦時不用一個案子匯出一次 */
+function exportAll(){
+  const p = curProject();
+  if(p){ p.data = S; p.updated = Date.now(); }   /* debounce 還沒寫回也不會漏掉 */
+  const payload = { type:"film-budget-store", v:1,
+                    exported:new Date().toISOString(), projects:STORE.projects };
+  dl(JSON.stringify(payload,null,2),
+     `film-budget-全部專案-${new Date().toISOString().slice(0,10)}.json`,
+     "application/json");
+}
+
 $("#btnImport").addEventListener("click", ()=> $("#fileIn").click());
 $("#fileIn").addEventListener("change", e => {
   const f = e.target.files[0]; if(!f) return;
@@ -1573,15 +2134,186 @@ $("#fileIn").addEventListener("change", e => {
   r.onload = () => {
     try{
       const d = JSON.parse(r.result);
-      if(!d.secs || !d.meta) throw 0;
-      /* 匯入建立成新專案，不覆蓋目前正在編輯的內容 */
+
+      /* 整個專案庫：一律用新增的方式加進來。匯入不該讓人丟東西。 */
+      if(d && Array.isArray(d.projects)){
+        const ok = d.projects.filter(p => p && p.data && p.data.secs && p.data.meta);
+        if(!ok.length) throw 0;
+        ok.forEach(p => addProject(
+          String(p.name || p.data.meta.project || "匯入的專案").trim() || "匯入的專案",
+          migrate(p.data)));
+        S = curProject().data;
+        fillForm(); renderTw(); renderAll(); save();
+        if(!$("#panelModal").hidden) $("#panelBody").innerHTML = panelHTML();
+        alert(`已匯入 ${ok.length} 個專案，現在共有 ${STORE.projects.length} 個。\n原本的專案都還在，沒有被覆蓋。`);
+        return;
+      }
+
+      /* 單一專案：建立成新專案，不覆蓋目前正在編輯的內容 */
+      if(!d || !d.secs || !d.meta) throw 0;
       S = migrate(d);
       addProject((S.meta.project || "匯入的專案").trim(), S);
       fillForm(); renderTw(); renderAll(); save();
+      if(!$("#panelModal").hidden) $("#panelBody").innerHTML = panelHTML();
     }catch(err){ alert("讀取失敗：這不是本工具匯出的 JSON 檔。"); }
   };
   r.readAsText(f);
   e.target.value = "";
+});
+
+/* =========================================================
+   窄螢幕的吸底總計條
+   ========================================================= */
+function setSheet(on){
+  document.body.classList.toggle("sheet-open", on);
+  $("#miniToggle").setAttribute("aria-expanded", String(on));
+  if(on){ $(".side").scrollTop = 0; document.body.classList.remove("mini-hide"); }
+  else syncMiniHide();          /* 收起後依當下捲動位置重新判斷 */
+}
+function closeSheet(){ setSheet(false); }
+$("#miniToggle").addEventListener("click", e => {
+  e.stopPropagation();
+  setSheet(!document.body.classList.contains("sheet-open"));
+});
+$("#sheetMask").addEventListener("click", closeSheet);
+/* 轉成桌機寬度時側欄本來就看得到，浮層要收掉 */
+window.addEventListener("resize", () => {
+  if(window.innerWidth > BAR_BP) closeSheet();
+  syncMiniHide();
+});
+
+/* 捲到「成本總覽」時，總計已經在畫面上了 —— 吸底那條只是重複，還擋著內容，
+   讓它滑下去。浮層展開時例外：那時它是唯一能把浮層收起來的控制項。
+   用 scroll 而非 IntersectionObserver：IO 的更新綁在 frame 上，
+   分頁在背景或被節流時不會補算，跟 rAF 是同一類問題。 */
+function syncMiniHide(){
+  if(document.body.classList.contains("sheet-open")) return;
+  const card = $("#sideCard");
+  if(!card) return;
+  const b = card.getBoundingClientRect();
+  const seen = b.top < window.innerHeight && b.bottom > 0;
+  document.body.classList.toggle("mini-hide", seen);
+}
+let miniTick = 0, miniTrail = 0;
+window.addEventListener("scroll", () => {
+  const now = Date.now();
+  clearTimeout(miniTrail);
+  /* 捲動中每 100ms 更新一次，停下來後再補算一次最終位置 */
+  if(now - miniTick > 100){ miniTick = now; syncMiniHide(); }
+  else miniTrail = setTimeout(syncMiniHide, 100);
+}, { passive: true });
+
+/* =========================================================
+   拖曳排序
+   用 pointer events 而不是 HTML5 drag-and-drop：後者在觸控裝置上
+   支援零散，而這個工具在手機上也要能用。同一個把手也吃方向鍵，
+   拖曳對鍵盤使用者不友善，不能只留拖曳這一條路。
+   ========================================================= */
+let dragState = null;
+
+function moveItemTo(sec, from, to){
+  if(from === to || from < 0 || to < 0) return;
+  const it = sec.items.splice(from, 1)[0];
+  sec.items.splice(to, 0, it);
+  $(`[data-sec="${sec.id}"] .sec-body`).innerHTML = itemsBody(sec);
+  refresh();
+}
+
+document.addEventListener("pointerdown", e => {
+  const handle = e.target.closest("[data-act='drag-item']");
+  if(!handle || handle.disabled) return;
+  const row = handle.closest("[data-item]");
+  const secEl = row && row.closest("[data-sec]");
+  const sec = secEl && findSec(secEl.dataset.sec);
+  if(!sec || sec.lock || !sec.items || sec.items.length < 2) return;
+
+  const rows = $$(".row", secEl);
+  const from = rows.indexOf(row);
+  if(from < 0) return;
+
+  const rects = rows.map(r => { const b = r.getBoundingClientRect(); return { top:b.top, h:b.height }; });
+  /* 一格的位移量用相鄰兩列的間距量，這樣 margin 與 gap 都算進去了 */
+  let step = rects[from].h;
+  if(rows.length > 1){
+    const a = from > 0 ? from - 1 : from;
+    const b = from > 0 ? from : from + 1;
+    step = Math.abs(rects[b].top - rects[a].top) || step;
+  }
+  dragState = { sec, rows, rects, from, to:from, step, y0:e.clientY, moved:false };
+  try{ handle.setPointerCapture(e.pointerId); }catch(err){}
+  document.body.classList.add("dragging-row");
+  row.classList.add("drag-me");
+  e.preventDefault();
+});
+
+document.addEventListener("pointermove", e => {
+  const d = dragState; if(!d) return;
+  let dy = e.clientY - d.y0;
+  if(!d.moved && Math.abs(dy) < 3) return;      /* 手指的小抖動不算拖曳 */
+  d.moved = true;
+
+  /* 拖不出這個區塊的範圍，免得被卡片的 overflow 裁掉看不見。
+     用中心對齊而不是邊緣對齊：判斷插入位置比的就是中心點，而最後一列
+     少了 border-bottom 比別人矮 1px，用邊緣夾會差半個像素，永遠拖不到底。 */
+  const last = d.rects[d.rects.length - 1];
+  const mid = d.rects[d.from].top + d.rects[d.from].h / 2;
+  const lo = (d.rects[0].top + d.rects[0].h / 2) - mid;
+  const hi = (last.top + last.h / 2) - mid;
+  dy = Math.max(lo, Math.min(hi, dy));
+  d.rows[d.from].style.transform = `translateY(${dy}px)`;
+
+  const center = d.rects[d.from].top + d.rects[d.from].h / 2 + dy;
+  let to = d.from;
+  /* 用 >= / <=：拖到底時 dy 被夾住，中心剛好落在最後一列的中心上，
+     嚴格比較會讓它停在倒數第二位，永遠拖不到最後。 */
+  if(dy < 0){
+    for(let i = d.from - 1; i >= 0; i--){
+      if(center <= d.rects[i].top + d.rects[i].h / 2) to = i; else break;
+    }
+  }else{
+    for(let i = d.from + 1; i < d.rects.length; i++){
+      if(center >= d.rects[i].top + d.rects[i].h / 2) to = i; else break;
+    }
+  }
+  if(to === d.to) return;
+  d.to = to;
+  /* 被跨過的列讓開一格，空出插入的位置 */
+  d.rows.forEach((el, i) => {
+    if(i === d.from) return;
+    let shift = 0;
+    if(to < d.from && i >= to && i < d.from)      shift = d.step;
+    else if(to > d.from && i > d.from && i <= to) shift = -d.step;
+    el.style.transform = shift ? `translateY(${shift}px)` : "";
+  });
+});
+
+function endDrag(){
+  const d = dragState; if(!d) return;
+  dragState = null;
+  document.body.classList.remove("dragging-row");
+  d.rows.forEach(el => { el.style.transform = ""; el.classList.remove("drag-me"); });
+  if(d.moved && d.to !== d.from) moveItemTo(d.sec, d.from, d.to);
+}
+document.addEventListener("pointerup", endDrag);
+document.addEventListener("pointercancel", endDrag);
+
+/* 把手也吃方向鍵：拖曳對鍵盤與輔助技術不友善 */
+document.addEventListener("keydown", e => {
+  if(e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+  const handle = e.target.closest && e.target.closest("[data-act='drag-item']");
+  if(!handle || handle.disabled) return;
+  const row = handle.closest("[data-item]");
+  const sec = findSec(row.closest("[data-sec]").dataset.sec);
+  if(!sec || sec.lock) return;
+  const i = sec.items.findIndex(x => x.id === row.dataset.item);
+  const j = i + (e.key === "ArrowUp" ? -1 : 1);
+  if(i < 0 || j < 0 || j >= sec.items.length) return;
+  e.preventDefault();
+  moveItemTo(sec, i, j);
+  /* 重繪後焦點要跟著那一列走，不然連按就斷了 */
+  const moved = $$(`[data-sec="${sec.id}"] .row`)[j];
+  const next = moved && moved.querySelector("[data-act='drag-item']");
+  if(next) next.focus();
 });
 
 /* =========================================================
@@ -1656,16 +2388,29 @@ window.addEventListener("resize", () => {
     if(t) document.documentElement.setAttribute("data-theme", t);
   }catch(e){}
 
-  $("#tplChips").innerHTML = TEMPLATES.map((t,i)=>
-    `<button class="chip" data-act="add-tpl" data-i="${i}">${t.icon} ${t.name}</button>`).join("");
+  renderChips();
 
   fillForm();
   bindForms();
   renderTw();
   renderAll();
   syncBarMenus();
+  syncMiniHide();
   /* 字型載入後按鈕寬度會變，重新量一次 */
   if(document.fonts && document.fonts.ready) document.fonts.ready.then(syncBarMenus);
+
+  /* 有分享碼就顯示它，但先不寫進使用者自己的專案庫 */
+  const m = /[#&]s=([A-Za-z0-9_-]+)/.exec(location.hash || "");
+  if(m && CAN_SHARE){
+    decodeShare(m[1]).then(d => {
+      if(!d || !d.secs || !d.meta) throw new Error("bad");
+      S = migrate(d);
+      sharedMode = true;
+      $("#sharedBar").hidden = false;
+      $("#savedText").textContent = "檢視中，未儲存";
+      fillForm(); renderTw(); renderAll(); syncBarMenus();
+    }).catch(()=> alert("這個分享連結讀不出來，可能在傳送過程中被截斷了。\n請對方改用「⬇ JSON」傳檔案。"));
+  }
 })();
 
 })();

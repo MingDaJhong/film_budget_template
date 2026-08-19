@@ -20,7 +20,7 @@
       </div>
     </div>
     <div class="tools">
-      <span class="saved" id="savedTag"><span class="dot"></span>自動儲存</span>
+      <span class="saved" id="savedTag"><span class="dot"></span><span id="savedText">自動儲存</span></span>
       <div class="bar-menu" data-row=".topbar-in">
         <button class="btn sm bar-toggle" aria-label="展開工具選單" aria-expanded="false" aria-haspopup="true">☰ 選單</button>
         <div class="bar-group">
@@ -39,6 +39,12 @@
   </div>
 </div>
 
+<div class="sharedbar no-print" id="sharedBar" hidden>
+  <span>👀 你正在看<b>別人分享</b>的試算 —— 內容還沒有存進你的專案庫，離開就不見了。</span>
+  <button class="btn sm primary" data-act="keep-shared">存成我的專案</button>
+  <button class="btn sm ghost" data-act="drop-shared">回到我自己的</button>
+</div>
+
 <div class="wrap">
   <!-- ============ LEFT ============ -->
   <main>
@@ -50,6 +56,7 @@
           <div class="field"><label>客戶／單位</label><input type="text" id="m_client" placeholder="例：○○股份有限公司"><span class="hint">報價單與合約的甲方會沿用這裡</span></div>
           <div class="field"><label>報價日期</label><input type="date" id="m_date"></div>
           <div class="field"><label>幣別</label>
+            <span class="hint" style="order:3">只更換顯示符號，不換算金額</span>
             <select id="m_cur">
               <option value="NT$">NT$ 新台幣</option><option value="US$">US$ 美元</option>
               <option value="¥">¥ 日圓</option><option value="€">€ 歐元</option>
@@ -75,6 +82,7 @@
       <div class="card-body">
         <p class="note" style="margin-top:0">找不到合適的分類？自己開一個。點下方範本可直接帶入常用項目，也可以建立空白區塊。</p>
         <div class="chips" id="tplChips"></div>
+        <p class="note" id="myTplNote" style="display:none">實線彩框的是<b>你自己存的範本</b>，所有專案共用。在任何區塊按「⭐ 存成範本」就能把目前的項目與價格存起來，下次直接叫回來。</p>
         <div class="sec-actions"><button class="btn" data-act="add-blank-sec">＋ 空白自訂區塊</button></div>
       </div>
     </section>
@@ -82,7 +90,17 @@
     <section class="card no-print" id="twCard">
       <div class="card-head"><h2><span class="ico">🧮</span>金額調整與稅務</h2></div>
       <div class="card-body">
-        <h3 class="grp" style="margin-top:0">金額調整</h3>
+        <h3 class="grp" style="margin-top:0">目標預算</h3>
+        <p class="note" style="margin-top:0">客戶先開了預算的時候用。填上目標總價，下面即時算出還差多少；按「調整到目標」就把沒鎖定的區塊按同一個比例縮放 —— <b>鎖定的區塊、代墊款與關掉的區塊都不會動</b>。要保住某一塊的價格，先到該區塊按「🔓 鎖定金額」。</p>
+        <div class="meta-grid">
+          <div class="field"><label>目標總價（含稅）</label><input type="number" id="m_target" min="0" step="1000"><span class="hint">填 0 就是不設目標</span></div>
+        </div>
+        <p class="note" id="targetHint"></p>
+        <div class="sec-actions" style="border-top:none;padding-top:8px;margin-top:0">
+          <button class="btn sm" data-act="fit-target">⇢ 調整到目標</button>
+        </div>
+
+        <h3 class="grp">金額調整</h3>
         <p class="note" style="margin-top:0">這些比例會套在直接成本之上，結果即時反映到右側總覽。</p>
         <div class="adj cols">
           <div class="adj-row">
@@ -110,6 +128,10 @@
             <input type="number" id="a_disc" min="0" step="100"><span class="pc"></span>
           </div>
         </div>
+        <div class="sec-actions" style="border-top:none;padding-top:10px">
+          <button class="btn sm ghost" data-act="convert-amounts">⇄ 全部金額換算</button>
+        </div>
+        <p class="note" style="margin-top:6px">上面的幣別下拉只換顯示符號。要真的換匯（或整份調漲、打折），按這顆填一個倍率 —— 所有單價、折扣、每次修改費用與「實際」金額都會乘上去，百分比類的設定不受影響。</p>
 
         <h3 class="grp">稅務與實拿試算（台灣）</h3>
         <div class="adj" style="margin-bottom:14px">
@@ -158,7 +180,8 @@
           <div class="field"><label>Email</label><input type="text" id="c_aEmail"></div>
         </div>
 
-        <h3 class="grp">乙方（承製方／製作方，也就是你）</h3>
+        <h3 class="grp">乙方（承製方／製作方，也就是你）<span class="tag">所有專案共用</span></h3>
+        <p class="note" style="margin-top:-4px">填一次就好 —— 開新專案時自動帶入，之後在任何一個專案改動都會同步回來。下方的<b>報價有效天數、驗收天數、影片規格、報價不含項目、付款方式與條款設定</b>也一併記住。資料存在你自己的瀏覽器裡。</p>
         <div class="meta-grid">
           <div class="field"><label>公司／個人名稱</label><input type="text" id="c_bName" placeholder="○○影像工作室"></div>
           <div class="field"><label>統一編號</label><input type="text" id="c_bTax"></div>
@@ -167,6 +190,9 @@
           <div class="field"><label>聯絡人</label><input type="text" id="c_bContact"></div>
           <div class="field"><label>電話</label><input type="text" id="c_bPhone"></div>
           <div class="field"><label>Email</label><input type="text" id="c_bEmail"></div>
+        </div>
+        <div class="sec-actions" style="border-top:none;padding-top:8px;margin-top:8px">
+          <button class="btn sm ghost danger" data-act="clear-profile">清除記住的資料</button>
         </div>
 
         <h3 class="grp">標的、交付與期程</h3>
@@ -188,7 +214,7 @@
           <div class="field" style="grid-column:1/-1"><label>交付項目</label><input type="text" id="c_deliver" placeholder="完成影片母檔 1 支、社群直式版本 1 支、專案素材備份"></div>
         </div>
 
-        <h3 class="grp">付款方式</h3>
+        <h3 class="grp">付款方式<span class="tag">共用</span></h3>
         <div class="meta-grid">
           <div class="field"><label>簽約訂金 %</label><input type="number" id="c_pay1" min="0" max="100" step="5"></div>
           <div class="field"><label>期中款 %</label><input type="number" id="c_pay2" min="0" max="100" step="5"><span class="hint">填 0 就是兩期付款</span></div>
@@ -197,7 +223,7 @@
         </div>
         <p class="note" id="payHint"></p>
 
-        <h3 class="grp">條款設定</h3>
+        <h3 class="grp">條款設定<span class="tag">共用</span></h3>
         <div class="meta-grid">
           <div class="field"><label>著作權歸屬</label>
             <select id="c_copyright">
@@ -227,13 +253,18 @@
 
   <!-- ============ RIGHT ============ -->
   <aside class="side">
-    <section class="card">
+    <section class="card" id="sideCard">
       <div class="card-head"><h2><span class="ico">💰</span>成本總覽</h2></div>
       <div class="total-box">
 
         <div class="grand">
           <span class="lbl">總計 TOTAL</span>
           <span class="val" id="t_total">—</span>
+        </div>
+
+        <div class="lines" id="targetBox" style="display:none;margin-top:12px">
+          <div class="line"><span>目標總價</span><span id="t_target">—</span></div>
+          <div class="line"><span>差額</span><span id="t_gap">—</span></div>
         </div>
 
         <div class="lines twbox" id="twBox">
@@ -286,6 +317,17 @@
       </div>
     </section>
   </aside>
+</div>
+
+<!-- 窄螢幕專用：側欄會掉到主欄下面，把最重要的兩個數字釘在下緣 -->
+<div class="sheet-mask no-print" id="sheetMask"></div>
+<div class="minibar no-print" id="miniBar">
+  <button class="mini-main" id="miniToggle" aria-expanded="false" aria-controls="sideCard">
+    <span class="mini-k">總計</span>
+    <span class="mini-v" id="mini_total">—</span>
+    <span class="mini-sub" id="mini_direct">—</span>
+    <span class="mini-chev" aria-hidden="true"></span>
+  </button>
 </div>
 
 <div class="foot">
