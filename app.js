@@ -346,7 +346,7 @@ function save(){
 }
 function flashSaved(){
   const t = document.getElementById("savedTag");
-  t.classList.remove("failed");
+  t.classList.remove("failed", "shared");
   t.title = "";
   document.getElementById("savedText").textContent = "自動儲存";
   t.style.color = "var(--green)";
@@ -1301,6 +1301,7 @@ document.addEventListener("click", e => {
     addProject((S.meta.project || "分享的專案").trim() || "分享的專案", S);
     try{ history.replaceState(null, "", shareBase()); }catch(e){}
     $("#sharedBar").hidden = true;
+    $("#savedTag").classList.remove("shared");
     $("#savedText").textContent = "自動儲存";
     save();
     alert("已存成你的專案，之後的改動都會自動儲存。");
@@ -2167,17 +2168,34 @@ $("#fileIn").addEventListener("change", e => {
    窄螢幕的吸底總計條
    ========================================================= */
 function setSheet(on){
+  const side = $(".side");
+  const was  = document.body.classList.contains("sheet-open");
   document.body.classList.toggle("sheet-open", on);
   $("#miniToggle").setAttribute("aria-expanded", String(on));
-  if(on){ $(".side").scrollTop = 0; document.body.classList.remove("mini-hide"); }
-  else syncMiniHide();          /* 收起後依當下捲動位置重新判斷 */
+  if(on){
+    side.scrollTop = 0;
+    document.body.classList.remove("mini-hide");
+    /* 蓋滿整個畫面，語意上就是一個對話框 —— 但只在展開這段期間；
+       桌機的側欄是版面的一部分，不該一直帶著這組屬性 */
+    side.setAttribute("role", "dialog");
+    side.setAttribute("aria-modal", "true");
+    side.setAttribute("aria-label", "成本總覽");
+    $("#sheetClose").focus();
+  }else{
+    side.removeAttribute("role");
+    side.removeAttribute("aria-modal");
+    side.removeAttribute("aria-label");
+    syncMiniHide();             /* 收起後依當下捲動位置重新判斷 */
+    /* 只有真的從展開狀態收回來才把焦點交還，不然每次 resize 都會搶焦點 */
+    if(was) $("#miniToggle").focus();
+  }
 }
 function closeSheet(){ setSheet(false); }
 $("#miniToggle").addEventListener("click", e => {
   e.stopPropagation();
   setSheet(!document.body.classList.contains("sheet-open"));
 });
-$("#sheetMask").addEventListener("click", closeSheet);
+$("#sheetClose").addEventListener("click", e => { e.stopPropagation(); closeSheet(); });
 /* 轉成桌機寬度時側欄本來就看得到，浮層要收掉 */
 window.addEventListener("resize", () => {
   if(window.innerWidth > BAR_BP) closeSheet();
@@ -2352,6 +2370,8 @@ function barOverflows(m){
   return right > limit + .5;
 }
 
+/* ≤BAR_BP 的收合狀態 CSS 自己就會生效（見 style.css 的漢堡選單段），
+   這裡照樣補上 .collapsed 只是讓 class 與實際樣子一致，不是它讓選單收起來的。 */
 function syncBarMenus(){
   const narrow = window.innerWidth <= BAR_BP;
   /* 先全部展開，量測才是「不收合時會佔多寬」 */
@@ -2409,6 +2429,8 @@ window.addEventListener("resize", () => {
       S = migrate(d);
       sharedMode = true;
       $("#sharedBar").hidden = false;
+      /* .shared 讓 ≤340px 保留這行字 —— 這個狀態不能只剩一顆點 */
+      $("#savedTag").classList.add("shared");
       $("#savedText").textContent = "檢視中，未儲存";
       fillForm(); renderTw(); renderAll(); syncBarMenus();
     }).catch(()=> alert("這個分享連結讀不出來，可能在傳送過程中被截斷了。\n請對方改用「⬇ JSON」傳檔案。"));

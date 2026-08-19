@@ -6,6 +6,7 @@
   --accent:#f5b544; --accent-soft:rgba(245,181,68,.14);
   --blue:#5aa9ff; --green:#54d68a; --red:#ff6b6b;
   --radius:14px; --radius-sm:9px;
+  --sheet-head-h:52px;      /* 窄螢幕全螢幕總覽的標題列高，總計的 sticky top 跟著它走 */
   --shadow:0 8px 30px rgba(0,0,0,.35);
   --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
 }
@@ -32,8 +33,22 @@ input,select,textarea{font-family:inherit;font-size:inherit;color:inherit}
 .topbar{
   position:sticky; top:0; z-index:50;
   background:color-mix(in srgb, var(--bg) 88%, transparent);
+  -webkit-backdrop-filter:blur(12px);
   backdrop-filter:blur(12px);
   border-bottom:1px solid var(--line);
+  /* 捲動時只搬圖層、不重畫：sticky 元素每一幀都在移動，沒有自己的合成層時
+     整條 topbar（含底線）會跟著重繪，手機上就是那種一格一格的輕微抖動 */
+  will-change:transform;
+}
+/* 手機關掉毛玻璃：backdrop-filter 會逼瀏覽器每一幀重新取樣底下的內容再模糊，
+   行動裝置算不完就掉幀，底線位置在整數與非整數像素之間來回＝肉眼看到的抖動。
+   底色本來就 88％ 不透明，模糊幾乎看不出來，換成實色視覺差異極小。 */
+@media(max-width:1080px){
+  .topbar{
+    background:var(--bg);
+    -webkit-backdrop-filter:none;
+    backdrop-filter:none;
+  }
 }
 .topbar-in{
   max-width:1400px; margin:0 auto; padding:12px 20px;
@@ -52,25 +67,59 @@ input,select,textarea{font-family:inherit;font-size:inherit;color:inherit}
 .tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-left:auto;justify-content:flex-end}
 
 /* ---------- 工具列漢堡選單 ----------
-   展開狀態下 .bar-menu / .bar-group 都是 display:contents，
-   等於不存在，裡面的按鈕照舊直接排在工具列上；
-   收合時（JS 加 .collapsed）外框變成定位容器，按鈕收進浮層。 */
-.bar-menu,.bar-group{display:contents}
-.bar-menu > .bar-toggle{display:none}
-.bar-menu.collapsed{display:inline-flex;position:relative}
-.bar-menu.collapsed > .bar-toggle{display:inline-flex}
-.bar-menu.collapsed > .bar-group{
+   收合是「預設狀態」，要攤開才需要條件 —— 這樣 ≤1080px 的第一幀就已經是
+   收好的 ☰，不必等 app.js 跑完 syncBarMenus()。
+   （原本相反：預設 display:contents 把九顆按鈕全攤出來，JS 再收起來。
+     手機重整時 header 會先以 182px 高、按鈕排三行的樣子畫出來，
+     JS 一到就縮成 103px，整頁往上跳 79px —— 就是那一下閃動。）
+   >1080px 則預設攤開，JS 量到那一列排不下時才補 .collapsed 收回浮層。 */
+.bar-menu{display:inline-flex;position:relative}
+.bar-menu > .bar-toggle{display:inline-flex}
+.bar-menu > .bar-group{
   display:none; position:absolute; top:calc(100% + 8px); right:0; z-index:120;
   flex-direction:column; align-items:stretch; gap:6px;
   min-width:190px; max-width:calc(100vw - 24px); padding:8px;
   background:var(--panel); border:1px solid var(--line2);
   border-radius:var(--radius); box-shadow:var(--shadow);
 }
-.bar-menu.collapsed.open > .bar-group{display:flex}
-.bar-menu.collapsed.open > .bar-toggle{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
-.bar-menu.collapsed > .bar-group .btn{
+.bar-menu.open > .bar-group{display:flex}
+.bar-menu.open > .bar-toggle{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.bar-menu > .bar-group .btn{
   width:100%; justify-content:flex-start; padding:8px 10px; font-size:13px;
 }
+/* 寬螢幕且 JS 沒判定排不下：display:contents 讓外框等於不存在，按鈕排回工具列。
+   用 not all and (max-width) 而不是 min-width:1081px，避免縮放產生 1080.5px
+   這種寬度時兩邊都不命中。浮層版的 .btn 要還原成 .btn.sm 的尺寸，改那邊要同步這裡。 */
+@media not all and (max-width:1080px){
+  .bar-menu:not(.collapsed),
+  .bar-menu:not(.collapsed) > .bar-group{display:contents}
+  .bar-menu:not(.collapsed) > .bar-toggle{display:none}
+  .bar-menu:not(.collapsed) > .bar-group .btn{width:auto;padding:4px 9px;font-size:12px}
+}
+/* ---------- 手機版 header ----------
+   窄螢幕原本會換行成兩排（品牌一排，儲存狀態＋☰ 掉到第二排），佔掉 103px、
+   螢幕高度的 1/8；而且 sticky 的面積越大，捲動時要重畫的東西越多。
+   改成硬性一排：品牌那側可壓縮、標題太長就省略號，右邊的工具永遠不換行。 */
+@media(max-width:560px){
+  .topbar-in{flex-wrap:nowrap; gap:10px; padding:9px 14px}
+  .brand{min-width:0; gap:8px}
+  .brand .logo{flex:none; width:30px; height:30px; border-radius:8px; font-size:16px}
+  /* 讓出 min-width:0 才會觸發下面 h1 的 ellipsis —— flex item 的預設下限是內容寬 */
+  .brand > div{min-width:0}
+  .brand h1{font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  /* 英文副標是裝飾，一排擠不下時第一個讓位 */
+  .brand small{display:none}
+  .tools{flex:none; gap:8px}
+}
+/* 極窄機（≤340px）：儲存狀態縮成一顆綠點，把寬度讓給標題。
+   點本身就是狀態，真正要看文字的時候（存檔失敗、看別人分享的）才展開。
+   斷點取 340 是量出來的：360px 還剩 38px 餘裕放得下「自動儲存」，
+   320px 差 1.3px 就會開始吃掉標題。 */
+@media(max-width:340px){
+  .saved #savedText{display:none}
+  .saved.failed #savedText,.saved.shared #savedText{display:inline}
+}
+
 /* 量測用：暫時關掉換行與縮放，才能用 scrollWidth 讀出真實需求寬度 */
 .measuring,.measuring *{flex-wrap:nowrap!important}
 .measuring *{flex-shrink:0!important;white-space:nowrap!important}
@@ -87,6 +136,18 @@ input,select,textarea{font-family:inherit;font-size:inherit;color:inherit}
 .btn.ghost:hover{background:var(--panel2);border-color:var(--line)}
 .btn.sm{padding:4px 9px;font-size:12px}
 .btn.danger:hover{border-color:var(--red);color:var(--red);background:transparent}
+
+/* ---------- 報價單／合約書的標題列 ----------
+   標題 + 兩顆按鈕，桌機排得下就一行。窄螢幕原本是靠 h2 被壓縮來讓位，
+   結果「報價單與合約書」被折成兩行、「書」自己掉下來一列。
+   改成標題整條佔一行、兩顆按鈕在下面等分 —— 標題不再斷字，
+   按鈕也從擠在角落的小方塊變成好按的整排。 */
+.doc-head h2{flex:1}
+@media(max-width:560px){
+  .doc-head{flex-wrap:wrap; row-gap:10px}
+  .doc-head h2{flex:1 0 100%; white-space:nowrap}
+  .doc-head .btn{flex:1; justify-content:center}
+}
 
 .wrap{max-width:1400px;margin:0 auto;padding:22px 20px 80px;display:grid;grid-template-columns:minmax(0,1fr) 350px;gap:22px;align-items:start}
 /* minmax(0,1fr) 而不是 1fr：1fr 的下限是 auto（＝內容的 min-content），
@@ -115,6 +176,36 @@ input[type=number]{font-variant-numeric:tabular-nums;font-family:var(--mono);fon
 input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 input[type=number]{-moz-appearance:textfield}
 select{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M0 0l5 6 5-6z' fill='%2398a1b2'/></svg>");background-repeat:no-repeat;background-position:right 9px center;padding-right:26px}
+
+/* ---------- 日期欄位 ----------
+   原生的日曆圖示是瀏覽器畫的深色圖，在深色主題底下等於隱形。
+   invert 把它翻成白的，opacity 壓到跟 --muted 差不多的視覺重量。 */
+input[type=date]::-webkit-calendar-picker-indicator{
+  filter:invert(1); opacity:.5; cursor:pointer; transition:opacity .15s;
+}
+input[type=date]::-webkit-calendar-picker-indicator:hover{opacity:.9}
+/* 淺色主題的底是白的，原生深色圖示本來就看得見，翻了反而消失 */
+:root[data-theme=light] input[type=date]::-webkit-calendar-picker-indicator{filter:none;opacity:.45}
+:root[data-theme=light] input[type=date]::-webkit-calendar-picker-indicator:hover{opacity:.8}
+/* date 的 shadow DOM 比一般 input 高 2px，補回來才跟隔壁欄位切齊 */
+input[type=date]{height:39px}
+
+/* iOS（iPhone／iPad，含 iOS 版 Chrome —— 那也是 WebKit）專屬：
+   date 欄位會用完整的地區格式（「2026年8月14日」）算出自己的內在寬度，
+   width:100% 與 min-width:0 都壓不住，結果是輸入框比容器寬、左右邊框被切掉。
+   關掉原生外觀才收得回來；順手把內容從置中改回靠左，跟其他欄位一致。
+   -webkit-touch-callout 只有 iOS WebKit 認得，桌機不會進到這一段。 */
+@supports (-webkit-touch-callout:none){
+  input[type=date]{
+    -webkit-appearance:none; appearance:none;
+    text-align:left; max-width:100%; min-width:0;
+  }
+  /* iOS 把日期值另外包在這個 shadow 元素裡，它自己置中、自己撐寬，
+     只改外層的 text-align 是壓不到的 */
+  input[type=date]::-webkit-date-and-time-value{
+    text-align:left; margin:0; min-width:0;
+  }
+}
 textarea{resize:vertical;min-height:70px;font-size:13.5px}
 
 /* ---------- Section ---------- */
@@ -307,7 +398,7 @@ body.dragging-row .row .drag{cursor:grabbing}
    ≤1080px 時側欄從 sticky 變 static，整個掉到主欄下面 ——
    主欄動輒九千像素高，改一個單價要捲到底才知道總計動了沒。
    把總計與直接成本釘在下緣，點一下才把完整側欄升起來。 */
-.minibar,.sheet-mask{display:none}
+.minibar,.sheet-head{display:none}
 @media(max-width:1080px){
   .minibar{
     display:block; position:fixed; left:0; right:0; bottom:0; z-index:62;
@@ -342,21 +433,41 @@ body.dragging-row .row .drag{cursor:grabbing}
   /* 讓最後一張卡不被總計條蓋住 */
   .foot{padding-bottom:66px}
 
-  /* 展開：側欄從底部升起。body 同時鎖捲動，
-     這樣 .side 移出 grid 造成的版面位移在背景看不到。 */
-  .sheet-mask{position:fixed;inset:0;z-index:60;background:rgba(5,6,9,.5);backdrop-filter:blur(2px)}
+  /* 展開：整片蓋滿。半高的抽屜在手機上很尷尬 —— 成本總覽有總計、稅費、
+     成本分佈、單位成本四段，72vh 永遠要在小框裡捲，還被下面的總計條吃掉一截。
+     body 同時鎖捲動，這樣 .side 移出 grid 造成的版面位移在背景看不到。 */
   body.sheet-open{overflow:hidden}
-  body.sheet-open .sheet-mask{display:block}
   body.sheet-open .side{
-    position:fixed; left:0; right:0; bottom:52px; z-index:61;
-    margin:0; max-height:min(72vh,560px); overflow-y:auto;
-    background:var(--panel); border-top:1px solid var(--line2);
-    box-shadow:0 -10px 40px rgba(0,0,0,.32);
+    position:fixed; inset:0; z-index:63;      /* 蓋過總計條的 62 */
+    margin:0; max-height:none;
+    overflow-y:auto; overscroll-behavior:contain;   /* 捲到底不要把背景一起帶著捲 */
+    background:var(--panel);
+    padding-bottom:env(safe-area-inset-bottom);
   }
-  body.sheet-open .side .card{margin-bottom:0;border:none;border-radius:0;box-shadow:none}
-  body.sheet-open .mini-chev{transform:rotate(180deg)}
-  /* 浮層展開時它是唯一能把浮層收起來的控制項，一定要看得見 */
-  body.sheet-open .minibar{transform:none;opacity:1;pointer-events:auto}
+  /* overflow:visible 是關鍵：.card 平時用 overflow:hidden 修圓角，但那會讓它自己
+     變成一個 scrollport，下面 .grand 的 sticky 就會以「不會捲動的 card」為基準，
+     結果是往下位移 52px 卻永遠不吸頂。全螢幕時圓角已經拿掉了，放它 visible。 */
+  body.sheet-open .side .card{margin-bottom:0;border:none;border-radius:0;box-shadow:none;overflow:visible}
+  /* 標題已經在 .sheet-head 上，卡片自己那顆就重複了 */
+  body.sheet-open .side .card-head{display:none}
+  /* 全螢幕的標題列：關閉鈕要一路跟著捲，不能捲兩頁才找得到 */
+  body.sheet-open .sheet-head{
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    position:sticky; top:0; z-index:4;
+    height:var(--sheet-head-h); padding:0 14px;
+    background:var(--panel); border-bottom:1px solid var(--line);
+  }
+  .sheet-title{display:flex;align-items:center;gap:8px;font-size:14.5px;font-weight:650}
+  .sheet-x{flex:none;padding:6px 11px;font-size:13px}
+  /* 總計釘在標題列下緣 —— 會打開這一頁就是為了看它，捲到成本分佈也不該消失。
+     box-shadow 是往下 8px 的同色實心塊：sticky 的交界處本來會露出捲到一半的
+     那行字，被它擋掉，總計與底下的清單之間就是一道乾淨的留白。 */
+  body.sheet-open .side .grand{
+    position:sticky; top:var(--sheet-head-h); z-index:2;
+    box-shadow:0 8px 0 var(--panel);
+  }
+  /* 蓋滿了就看不到，別再讓它跟著重繪 */
+  body.sheet-open .minibar{display:none}
   /* 報價單／合約預覽開著時不要浮在上面 */
   body.modal-open .minibar{display:none}
 }
@@ -444,6 +555,10 @@ body.dragging-row .row .drag{cursor:grabbing}
 .saved.failed .dot{background:var(--red)}
 
 .foot{max-width:1400px;margin:0 auto;padding:0 20px 40px;color:var(--faint);font-size:12px;text-align:center}
+/* 已經坐在電腦前的人不需要被建議用電腦，平板也一樣 ——
+   斷點取 560 就是為了只講給手機聽（iPad 直式 744、手機橫置 900+ 都不會看到）。 */
+.foot-wide{display:none}
+@media(max-width:560px){.foot-wide{display:block;margin-top:8px}}
 .foot a{color:var(--muted)}
 
 /* ---------- 合約設定 ---------- */
@@ -538,6 +653,8 @@ body.modal-open{overflow:hidden}
     position:static!important; max-height:none!important; overflow:visible!important;
     box-shadow:none!important; border-top:none!important; background:transparent!important;
   }
+  /* 全螢幕時卡片標題讓位給 .sheet-head，但 .sheet-head 是 .no-print —— 印出來要把它換回去 */
+  body.sheet-open .side .card-head{display:flex!important}
 }
 
 /* 鎖定標記：跟「代墊」用同一組 pill，但換成中性色，避免兩個藍標並排分不出來 */
