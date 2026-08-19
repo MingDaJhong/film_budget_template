@@ -47,7 +47,9 @@ input,select,textarea{font-family:inherit;font-size:inherit;color:inherit}
 }
 .brand h1{font-size:16px;line-height:1.2}
 .brand small{display:block;color:var(--faint);font-size:11.5px;font-weight:400;letter-spacing:.03em}
-.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+/* margin-left:auto：窄螢幕時 .tools 會換到第二行，不推到右邊的話
+   ☰ 會落在左側，而浮層是靠 ☰ 的右緣往左展開的，就會被畫面左緣裁掉 */
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-left:auto;justify-content:flex-end}
 
 /* ---------- 工具列漢堡選單 ----------
    展開狀態下 .bar-menu / .bar-group 都是 display:contents，
@@ -60,7 +62,7 @@ input,select,textarea{font-family:inherit;font-size:inherit;color:inherit}
 .bar-menu.collapsed > .bar-group{
   display:none; position:absolute; top:calc(100% + 8px); right:0; z-index:120;
   flex-direction:column; align-items:stretch; gap:6px;
-  min-width:190px; padding:8px;
+  min-width:190px; max-width:calc(100vw - 24px); padding:8px;
   background:var(--panel); border:1px solid var(--line2);
   border-radius:var(--radius); box-shadow:var(--shadow);
 }
@@ -87,12 +89,16 @@ input,select,textarea{font-family:inherit;font-size:inherit;color:inherit}
 .btn.danger:hover{border-color:var(--red);color:var(--red);background:transparent}
 
 .wrap{max-width:1400px;margin:0 auto;padding:22px 20px 80px;display:grid;grid-template-columns:minmax(0,1fr) 350px;gap:22px;align-items:start}
-@media(max-width:1080px){.wrap{grid-template-columns:1fr}}
+/* minmax(0,1fr) 而不是 1fr：1fr 的下限是 auto（＝內容的 min-content），
+   標題列裡有 nowrap 的長名稱時會把整欄撐開，卡片內的 ellipsis 就永遠不會觸發 */
+@media(max-width:1080px){.wrap{grid-template-columns:minmax(0,1fr)}}
 
 .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);margin-bottom:18px;overflow:hidden}
 .card-head{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line);background:var(--panel2)}
-.card-head h2{font-size:14.5px;display:flex;align-items:center;gap:8px}
-.card-head .ico{font-size:16px}
+.card-head h2{font-size:14.5px;display:flex;align-items:center;gap:8px;min-width:0}
+/* 區塊名稱是唯一該讓步的東西：太長就省略，標記與金額都不擠壓 */
+.sec-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.card-head .ico{font-size:16px;flex:none}
 .card-body{padding:14px 16px}
 
 /* ---------- Meta ---------- */
@@ -117,7 +123,7 @@ textarea{resize:vertical;min-height:70px;font-size:13.5px}
 .sec.collapsed .sec-body{display:none}
 .sec-title{border:none;background:transparent;font-size:14.5px;font-weight:650;padding:2px 4px;border-radius:6px;width:auto;flex:1;min-width:80px}
 .sec-title:focus{background:var(--bg2);box-shadow:none;border:1px solid var(--accent)}
-.sec-sum{font-family:var(--mono);font-size:13px;color:var(--accent);font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums}
+.sec-sum{font-family:var(--mono);font-size:13px;color:var(--accent);font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums;flex:none}
 .sw{position:relative;width:36px;height:20px;flex:none}
 .sw input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer;z-index:2}
 .sw i{position:absolute;inset:0;background:var(--line2);border-radius:20px;transition:.18s}
@@ -213,7 +219,13 @@ body.dragging-row .row .drag{cursor:grabbing}
 .na{color:var(--faint);text-align:center;font-size:12px}
 .row .act input{background:color-mix(in srgb,var(--blue) 9%,var(--bg2));border-color:color-mix(in srgb,var(--blue) 30%,var(--line))}
 .tbl.with-act .thead,.row.has-act{grid-template-columns:20px 24px minmax(100px,1.9fr) 102px 92px 62px 80px minmax(84px,1fr) minmax(84px,1fr) 32px}
-.tag{display:inline-block;margin-left:8px;padding:1px 7px;border-radius:20px;font-size:10.5px;font-weight:600;letter-spacing:.03em;color:var(--blue);background:color-mix(in srgb,var(--blue) 14%,transparent);border:1px solid color-mix(in srgb,var(--blue) 35%,transparent);vertical-align:middle}
+.tag{display:inline-block;margin-left:8px;padding:1px 7px;border-radius:20px;font-size:10.5px;font-weight:600;letter-spacing:.03em;color:var(--blue);background:color-mix(in srgb,var(--blue) 14%,transparent);border:1px solid color-mix(in srgb,var(--blue) 35%,transparent);vertical-align:middle;
+  white-space:nowrap;flex:none}
+/* 螢幕太窄時標記只留圖示，字收起來，免得把名稱擠沒了 */
+@media(max-width:560px){
+  .tag{margin-left:6px;padding:1px 5px}
+  .tag .tw{display:none}
+}
 .btn.ghost.on{color:var(--blue);border-color:color-mix(in srgb,var(--blue) 45%,transparent);background:color-mix(in srgb,var(--blue) 10%,transparent)}
 .inline-chk{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--text);padding:7px 0}
 .inline-chk input{width:15px;height:15px;accent-color:var(--accent);margin:0}
@@ -445,6 +457,7 @@ body.dragging-row .row .drag{cursor:grabbing}
 .modal[hidden]{display:none}
 body.modal-open{overflow:hidden}
 .modal-bar{position:sticky;top:0;z-index:2;display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line)}
+.modal-bar > strong{margin-right:auto}
 .modal-bar strong{margin-right:auto;font-size:14px}
 /* 專案／範本面板 */
 .panel{max-width:960px;margin:24px auto;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:20px 22px;box-shadow:var(--shadow)}

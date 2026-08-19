@@ -672,10 +672,12 @@ function secHTML(sec, ctx){
   const cls = "card sec" + (sec.on ? "" : " off") + (sec.open === false ? " collapsed" : "")
             + (sec.lock ? " locked" : "");
   const delBtn = sec.fixed ? "" : `<button class="iconbtn danger no-print" data-act="del-sec" title="刪除此區塊" aria-label="刪除此區塊">🗑</button>`;
-  const tag = (sec.pass ? `<span class="tag" title="代墊款：另加管理費，總覽中分開統計">代墊</span>` : "")
-            + (sec.lock ? `<span class="tag lock" title="已鎖定：不會被「調整到目標」縮放">🔒 鎖定</span>` : "");
+  /* 文字用 .tw 包起來，窄螢幕只留圖示，才不會把區塊名稱擠掉 */
+  const tag = (sec.pass ? `<span class="tag" title="代墊款：另加管理費，總覽中分開統計">💳<span class="tw"> 代墊</span></span>` : "")
+            + (sec.lock ? `<span class="tag lock" title="已鎖定：金額改不了，也不會被「調整到目標」縮放">🔒<span class="tw"> 鎖定</span></span>` : "");
+  /* 名稱包成 span 才有辦法做 ellipsis —— 裸文字節點在 flex 容器裡是匿名 item，套不上樣式 */
   const title = sec.fixed
-    ? `<h2 style="flex:1"><span class="ico">${sec.icon}</span>${esc(sec.name)}${tag}</h2>`
+    ? `<h2 style="flex:1;min-width:0"><span class="ico">${sec.icon}</span><span class="sec-name">${esc(sec.name)}</span>${tag}</h2>`
     : `<span class="ico">${sec.icon}</span><input class="sec-title" value="${esc(sec.name)}" data-act="ren-sec">${tag}`;
   const body = sec.kind === "revision" ? revBody(sec, ctx)
              : sec.kind === "usage"    ? usageBody(sec)
